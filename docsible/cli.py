@@ -5,11 +5,11 @@ import click
 from shutil import copyfile
 from datetime import datetime
 from jinja2 import Environment, BaseLoader
-from role_template import static_template
-from playbook_template import static_playbook
-from utils.mermaid import generate_mermaid_playbook, generate_mermaid_role_tasks_per_file
-from utils.yaml import load_yaml_generic, load_yaml_files_from_dir_custom
-from utils.special_tasks_keys import process_special_task_keys
+from docsible.role_template import static_template
+from docsible.playbook_template import static_playbook
+from docsible.utils.mermaid import generate_mermaid_playbook, generate_mermaid_role_tasks_per_file
+from docsible.utils.yaml import load_yaml_generic, load_yaml_files_from_dir_custom
+from docsible.utils.special_tasks_keys import process_special_task_keys
 
 def get_version():
     return "0.4.12"
