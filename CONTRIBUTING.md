@@ -2,7 +2,9 @@
 
 ## Introduction
 
-Thank you for considering contributing to Docsible! We appreciate your effort and contributions can help the project grow and improve.
+Thank you for considering contributing to this Docsible fork! We appreciate your effort and contributions can help the project grow and improve.
+
+This repository is independently maintained by Jier Nzuanzu and is based on the upstream [Docsible project](https://github.com/docsible/docsible) by Lucian BLETAN and other contributors. Submit changes for this fork to `jier/docsible`. Upstream contributions should be proposed separately to `docsible/docsible`.
 
 ## How to Get Started
 
@@ -106,16 +108,16 @@ Both templates respect the same flags for consistent behavior.
     git push origin [branch-name]
     ```
 
-5. **Create a Pull Request**: Once the changes are pushed, create a pull request from your forked repository to the original repository.
+5. **Create a Pull Request**: Once the changes are pushed, create a pull request to this fork.
 
-6. **Review and Merge**: After a review, your changes may be merged into the original repository.
+6. **Review and Merge**: After a review, your changes may be merged into this fork.
 
 ## Release Process
 
 Versions are managed via git tags. To cut a new release:
 
-1. Update the version in two places:
-   - `pyproject.toml` — `version = "X.Y.Z"` (both the `[project]` and `[tool.poetry]` sections)
+1. Update the version in one place:
+   - `pyproject.toml` — `version = "X.Y.Z"`
    - `docsible/constants.py` — `VERSION = "X.Y.Z"` (used as fallback when not in a git repo)
 
 2. Create an annotated git tag:
@@ -123,7 +125,7 @@ Versions are managed via git tags. To cut a new release:
    git tag -a vX.Y.Z -m "Release X.Y.Z: <brief description>"
    ```
 
-3. Push the tag to trigger any release workflows:
+3. Push the tag after a release workflow is configured:
    ```bash
    git push origin vX.Y.Z
    ```
@@ -134,15 +136,12 @@ The `docsible --version` command reads the version dynamically from git tags at 
 
 ## Testing
 
-### Shell Integration Tests
-
-The shell integration tests cover end-to-end CLI behaviour across all major commands:
+Install development dependencies and run the test suite:
 
 ```bash
-bash tests/integration/test_orchestrator_cli.sh
+uv sync --group dev
+uv run pytest
 ```
-
-These 40 tests exercise `docsible document role`, `analyze role`, `validate role`, and `scan collection` with the full range of feature flags.
 
 ## Best Practices
 
