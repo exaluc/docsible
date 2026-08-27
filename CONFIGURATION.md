@@ -1,521 +1,156 @@
 # Docsible Configuration Reference
 
-This document covers all configuration options for Docsible: the `.docsible/config.yml` schema, built-in presets, all CLI flags, CI/CD integration, and team workflows.
+Docsible configuration is role-local. For a role passed with `--role`, it reads:
 
-## Table of Contents
+```text
+<role>/.docsible/config.yml
+```
 
-- [Config File Schema](#config-file-schema)
-- [Presets](#presets)
-- [CLI Flags](#cli-flags)
-  - [Path Flags](#path-flags)
-  - [Output Flags](#output-flags)
-  - [Content Flags](#content-flags)
-  - [Visualization and Generation Flags](#visualization-and-generation-flags)
-  - [Analysis and Recommendations Flags](#analysis-and-recommendations-flags)
-  - [CI/CD Flags](#cicd-flags)
-  - [Template Flags](#template-flags)
-  - [Repository Flags](#repository-flags)
-  - [Framing Flags](#framing-flags)
-- [CI/CD Integration](#cicd-integration)
-- [Suppression Rules](#suppression-rules)
-- [Team Workflow](#team-workflow)
+Initialize it with:
 
----
+```bash
+docsible init --path ./my-role --preset team
+```
 
-## Config File Schema
+Install this fork from GitHub:
 
-Docsible reads `.docsible/config.yml` from the working directory (or the directory passed to `--path`). The file is created by `docsible init` and can be edited manually.
+```bash
+pip install "git+https://github.com/jier/docsible.git"
+```
+
+For a pinned revision, append `@<tag-or-commit>` to that URL.
+
+## Configuration File
 
 ```yaml
 # .docsible/config.yml
-
-# Built-in preset to apply. One of: personal, team, enterprise, consultant.
-# Preset settings are applied first; CLI flags and the fields below override them.
 preset: team
 
-# Per-key overrides that supplement or override the chosen preset.
+# Settings that override values supplied by the selected preset.
 overrides:
-  graph: true
+  generate_graph: true
   hybrid: true
+  max_recommendations: null # No display cap.
 
-# CI/CD platform metadata written by `docsible init` when CI/CD setup is requested.
-ci_cd:
-  platform: github        # github | gitlab | azure
-  strict_validation: true
-
-# Analysis behavior — override preset defaults or set standalone values.
-fail_on: warning          # none | info | warning | critical (default: none)
-essential_only: false     # true = show only WARNING/CRITICAL findings (default varies by preset)
-max_recommendations: 10   # integer or null for unlimited (default varies by preset)
-```
-
-### Field Descriptions
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `preset` | string \| null | null | Applies a built-in preset before all other settings |
-| `overrides` | mapping | `{}` | Key/value pairs that override individual preset settings |
-| `ci_cd` | mapping | `{}` | CI/CD metadata; `strict_validation: true` makes validate exit 1 on any WARNING/CRITICAL |
-| `fail_on` | string \| null | null (preset default or `none`) | Exit threshold for CI: `none`, `info`, `warning`, or `critical` |
-| `essential_only` | bool \| null | null (preset default) | When true, only WARNING and CRITICAL findings are shown |
-| `max_recommendations` | int \| null | null (preset default) | Cap on displayed recommendations; null means unlimited |
-
-CLI flags always override values from the config file, which in turn override preset defaults.
-
----
-
-## Presets
-
-Presets bundle a curated set of settings suited to common use cases. Apply a preset with `--preset` on any command, or set `preset:` in `.docsible/config.yml`.
-
-```bash
-docsible document role . --preset=personal
-docsible document role . --preset=team
-docsible document role . --preset=enterprise
-docsible document role . --preset=consultant
-```
-
-### Preset Settings Table
-
-| Setting | `personal` | `team` | `enterprise` | `consultant` |
-|---|---|---|---|---|
-| Description | Solo / learning | Team collaboration | Production / compliance | Client deliverables |
-| `generate_graph` | false | smart defaults | true | true |
-| `minimal` | true | — | false | false |
-| `validate_markdown` | true | true | true | true |
-| `strict_validation` | false | false | true | false |
-| `auto_fix` | false | true | false | false |
-| `no_backup` | true | false | false | false |
-| `complexity_report` | false | false | true | true |
-| `simplification_report` | false | false | true | true |
-| `show_dependencies` | false | smart defaults | true | true |
-| `positive_framing` | true | true | true | true |
-| `comments` | false | true | true | true |
-| `task_line` | false | false | true | true |
-| `include_complexity` | false | false | true | true |
-| `fail_on` | none | warning | critical | warning |
-| `essential_only` | true | false | false | false |
-| `max_recommendations` | 5 | 10 | unlimited | 15 |
-
-"smart defaults" means the setting is left unset in the preset and auto-adjusted based on role complexity at runtime.
-
-Individual flags passed on the command line always override preset defaults.
-
----
-
-## CLI Flags
-
-### Path Flags
-
-| Flag | Short | Description |
-|---|---|---|
-| `--role TEXT` | `-r` | Path to the Ansible role directory |
-| `--collection TEXT` | `-c` | Path to the Ansible collection directory |
-| `--playbook TEXT` | `-p` | Path to the playbook file |
-
-### Output Flags
-
-| Flag | Short | Default | Description |
-|---|---|---|---|
-| `--output TEXT` | `-o` | `README.md` | Output file name |
-| `--no-backup` | `-nob` | off | Do not back up the existing README before overwriting |
-| `--append` | `-a` | off | Append to the existing README instead of replacing it |
-| `--no-docsible` | `-nod` | off | Do not generate `.docsible` metadata file |
-| `--dry-run` | — | off | Preview output without writing any files |
-| `--validate / --no-validate` | — | on | Validate markdown formatting before writing |
-| `--auto-fix` | — | off | Automatically fix common markdown formatting issues |
-| `--strict-validation` | — | off | Exit 1 if markdown validation errors are found (fixed — previously a no-op in validate mode) |
-
-### Content Flags
-
-| Flag | Description |
-|---|---|
-| `--no-vars` | Hide variable documentation (defaults, vars, argument_specs) |
-| `--no-tasks` | Hide task lists and task details |
-| `--no-diagrams` | Hide all Mermaid diagrams |
-| `--no-examples` | Hide example playbook sections |
-| `--no-metadata` | Hide role metadata, author, and license |
-| `--no-handlers` | Hide handlers section |
-| `--minimal` | Enable all `--no-*` flags; generate the smallest possible README |
-| `--include-complexity` | Add a complexity analysis section to the README |
-
-### Visualization and Generation Flags
-
-| Flag | Short | Description |
-|---|---|---|
-| `--graph` | `-g` | Generate Mermaid diagrams for role visualization |
-| `--comments` | `-com` | Extract and include inline task comments |
-| `--task-line` | `-tl` | Include source file line numbers for each task |
-| `--simplify-diagrams` | — | Show only high-level diagrams; hide detailed flowcharts |
-| `--complexity-report` | — | Include complexity analysis in documentation |
-| `--simplification-report` | — | Include pattern analysis with simplification suggestions |
-| `--show-dependencies` | — | Generate task dependency matrix table |
-| `--analyze-only` | — | Show complexity analysis without generating documentation |
-
-### Analysis and Recommendations Flags
-
-These flags control how findings (INFO / WARNING / CRITICAL) are collected and displayed.
-
-| Flag | Default | Description |
-|---|---|---|
-| `--recommendations-only` | off | Show recommendations without generating documentation |
-| `--show-info` | off | Show INFO-level recommendations (hidden by default) |
-| `--advanced-patterns` | off | Show all findings including INFO-level; removes the default 5-recommendation cap |
-| `--no-suppress` | off | Bypass `.docsible/suppress.yml` and show all recommendations including suppressed ones |
-| `--output-format [text\|json]` | `text` | Output format for findings; `json` emits machine-readable JSON |
-
-#### `--advanced-patterns` behaviour
-
-Without this flag: only WARNING and CRITICAL findings are shown, capped at 5.
-
-With this flag: all findings including INFO are shown with no cap.
-
-```bash
-# Default — at most 5 WARNING/CRITICAL findings
-docsible document role --role .
-
-# Advanced — all findings, no cap
-docsible document role --role . --advanced-patterns
-```
-
-#### Pattern analysis checks
-
-The table below lists the checks run by the pattern analysis subsystem (enabled by `--simplification-report` or `--advanced-patterns`).
-
-| Pattern id | Category | Severity | What it detects | Notes |
-|---|---|---|---|---|
-| `missing_idempotency` | Maintainability | WARNING | `shell`/`command`/`raw` tasks without `creates`, `removes`, or `changed_when` | — |
-| `monolithic_main_file` | Maintainability | WARNING | `main.yml` files containing more than 30 tasks | — |
-| `magic_values` | Maintainability | INFO | Repeated literal strings (10+ chars, no Jinja2) used in 3 or more tasks | — |
-| `missing_check_mode` | Maintainability | INFO | Tasks that register variables but may fail under `--check` mode | — |
-| `missing_failed_when` | Maintainability | INFO | `shell`/`command` tasks with pipes but no `failed_when` | — |
-| `variable_shadowing` | Maintainability | WARNING | Variables defined in both `defaults/` and `vars/` | — |
-| `unnamed_tasks` | Maintainability | INFO | Tasks missing a `name:` field (threshold: 3+ unnamed tasks) | Skips structural tasks: `include_tasks`, `import_tasks`, `include_role`, `import_role`, `meta`, `block`/`rescue`/`always` |
-
-#### `--output-format json` schema
-
-```json
-{
-  "role": "my-role",
-  "findings": [
-    {
-      "severity": "WARNING",
-      "message": "No example playbook found",
-      "category": "documentation"
-    }
-  ],
-  "summary": {
-    "total": 3,
-    "critical": 0,
-    "warning": 2,
-    "info": 1
-  },
-  "truncated": false
-}
-```
-
-```bash
-docsible analyze role --role . --output-format json
-docsible analyze role --role . --output-format json | jq '.summary'
-```
-
-### CI/CD Flags
-
-| Flag | Default | Description |
-|---|---|---|
-| `--fail-on [none\|info\|warning\|critical]` | `none` | Exit with code 1 if findings at or above this severity exist |
-
-#### `--fail-on` exit codes
-
-| Value | Exit 1 when... |
-|---|---|
-| `none` | Never (always exits 0) |
-| `info` | Any INFO, WARNING, or CRITICAL finding exists |
-| `warning` | Any WARNING or CRITICAL finding exists |
-| `critical` | Any CRITICAL finding exists |
-
-```bash
-# Fail only on critical issues (recommended for most CI pipelines)
-docsible validate role --role . --fail-on critical
-
-# Fail on warnings or worse (stricter; recommended for team preset)
-docsible validate role --role . --fail-on warning
-
-# Never fail (default; useful for documentation-only jobs)
-docsible validate role --role . --fail-on none
-```
-
-#### `--strict-validation` (fixed)
-
-`--strict-validation` in `validate` mode now correctly exits 1 when WARNING or CRITICAL findings are present. In previous versions this flag was a no-op when used with `docsible validate role`.
-
-```bash
-docsible validate role --role . --strict-validation
-```
-
-### Template Flags
-
-| Flag | Short | Description |
-|---|---|---|
-| `--md-role-template TEXT` | `-rtpl`, `-tpl` | Path to a custom role Markdown template |
-| `--md-collection-template TEXT` | `-ctpl` | Path to a custom collection Markdown template |
-| `--hybrid` | — | Use hybrid template (manual + auto-generated sections) |
-
-### Repository Flags
-
-| Flag | Short | Default | Description |
-|---|---|---|---|
-| `--repository-url TEXT` | `-ru` | `detect` | Repository base URL for standalone roles |
-| `--repo-type TEXT` | `-rt` | — | Repository type: `github`, `gitlab`, `gitea`, etc. |
-| `--repo-branch TEXT` | `-rb` | — | Repository branch name (e.g., `main`) |
-
-### Framing Flags
-
-| Flag | Default | Description |
-|---|---|---|
-| `--positive / --neutral` | positive | Use positive/actionable output framing |
-| `--help-full` | — | Show all available options and advanced settings |
-| `--preset [personal\|team\|enterprise\|consultant]` | — | Apply a built-in preset |
-
----
-
-## CI/CD Integration
-
-### Quick Start
-
-```bash
-# Fail the pipeline if CRITICAL findings exist
-docsible validate role --role . --fail-on critical
-
-# Fail the pipeline if WARNING or CRITICAL findings exist
-docsible validate role --role . --fail-on warning
-
-# Generate machine-readable output for downstream processing
-docsible analyze role --role . --output-format json
-```
-
-### GitHub Actions
-
-```yaml
-- name: Validate role documentation
-  run: docsible validate role --role . --fail-on critical
-
-- name: Generate documentation
-  run: docsible document role --role . --no-backup
-  if: github.ref == 'refs/heads/main'
-```
-
-See `examples/ci_pipeline/github-actions.yml` for a complete workflow.
-
-### GitLab CI
-
-```yaml
-docsible:check:
-  stage: test
-  image: python:3.12
-  script:
-    - pip install docsible
-    - docsible validate role --role . --fail-on warning
-```
-
-See `examples/ci_pipeline/gitlab-ci.yml` for a complete pipeline.
-
-### Pre-commit Hook
-
-```yaml
-- id: docsible-validate
-  name: Validate Ansible role documentation
-  language: system
-  entry: docsible validate role --role . --fail-on critical
-  pass_filenames: false
-  types: [yaml]
-```
-
-See `examples/ci_pipeline/pre-commit-config.yaml` for the full hook configuration.
-
-### Choosing a `--fail-on` Level
-
-| Scenario | Recommended level |
-|---|---|
-| Catch only blocking errors | `critical` |
-| Enforce team quality standards | `warning` |
-| Enforce all recommendations | `info` |
-| Documentation-only (never fail) | `none` |
-
----
-
-## Suppression Rules
-
-Suppression rules let you silence specific recommendations that are known false positives or deliberately accepted for your project. Rules are stored in `.docsible/suppress.yml` inside the `.docsible` directory alongside `config.yml`.
-
-### File location and format
-
-```yaml
-# .docsible/suppress.yml
-rules:
-  - id: ab12cd34
-    pattern: "no example playbook"
-    reason: "Examples live in a separate repository"
-    file_pattern: null        # optional: scope to a glob (e.g. "roles/webserver")
-    use_regex: false          # true = treat pattern as a regular expression
-    expires_at: "2026-06-01T00:00:00+00:00"  # optional: auto-expires on this date
-    approved_by: "alice"      # optional: audit trail
-    match_count: 3
-    last_matched: "2026-03-01T10:00:00+00:00"
-    created_at: "2026-01-15T09:00:00+00:00"
-```
-
-The file is managed by the `docsible suppress` command group — you do not need to edit it by hand.
-
-### CLI commands
-
-| Command | Description |
-|---|---|
-| `docsible suppress add <pattern> --reason <text>` | Add a new suppression rule |
-| `docsible suppress list` | List all active (non-expired) rules |
-| `docsible suppress remove <id>` | Remove a rule by its ID |
-| `docsible suppress clean` | Delete all expired rules |
-
-#### `suppress add` options
-
-| Option | Short | Description |
-|---|---|---|
-| `--reason TEXT` | `-r` | **Required.** Justification for suppressing this recommendation |
-| `--file TEXT` | `-f` | Scope rule to files matching a glob pattern (e.g., `roles/webserver`) |
-| `--expires N` | `-e` | Auto-expire the rule after N days |
-| `--approved-by TEXT` | — | Record an approver name for audit purposes |
-| `--regex` | — | Treat the pattern as a regular expression instead of a substring |
-| `--path TEXT` | `-p` | Base path for locating `.docsible/suppress.yml` (default: current directory) |
-
-Pattern matching is case-insensitive substring by default. Pass `--regex` to use a full regular expression.
-
-```bash
-# Suppress a specific finding indefinitely
-docsible suppress add "no example playbook" --reason "Examples in separate repo"
-
-# Suppress with an expiry date (good for temporary waivers)
-docsible suppress add "no example playbook" --reason "Legacy role" --expires 90
-
-# Suppress scoped to a specific role directory
-docsible suppress add "no example playbook" --reason "Legacy" --file "roles/webserver"
-
-# Use a regex pattern
-docsible suppress add "task\s+name.*missing" --reason "Naming enforced in pre-commit" --regex
-```
-
-#### `suppress list` options
-
-| Option | Description |
-|---|---|
-| `--show-expired` | Include expired rules in the listing (hidden by default) |
-| `--path TEXT` | Base path for locating `.docsible/suppress.yml` |
-
-#### `suppress clean` options
-
-| Option | Description |
-|---|---|
-| `--dry-run` | Show what would be removed without making changes |
-| `--path TEXT` | Base path for locating `.docsible/suppress.yml` |
-
-Only rules with a past `expires_at` date are removed. Rules with no expiry are never touched by `clean`.
-
-### Bypassing suppression
-
-Pass `--no-suppress` to `docsible document role` or `docsible analyze role` to see all recommendations regardless of any rules in `suppress.yml`. This is useful for auditing or reviewing whether existing rules are still needed.
-
-```bash
-docsible document role --role . --no-suppress
-docsible analyze role --role . --no-suppress
-```
-
-### Committing suppress.yml
-
-Commit `.docsible/suppress.yml` to version control alongside `config.yml` so that all team members and CI runners apply the same suppressions automatically.
-
-```bash
-git add .docsible/suppress.yml
-git commit -m "chore: suppress known false-positive in legacy webserver role"
-```
-
----
-
-## Team Workflow
-
-### 1. Initialize the project
-
-```bash
-# Interactive wizard — picks a preset, optionally generates CI/CD config
-docsible init
-
-# Non-interactive — apply a preset directly
-docsible init --preset=team
-```
-
-This creates `.docsible/config.yml` in the current directory.
-
-### 2. Edit the config for your team
-
-```yaml
-# .docsible/config.yml
-preset: team
+# Recommendation settings. See "Precedence" for their interaction with presets.
 fail_on: warning
 essential_only: false
 max_recommendations: 10
-overrides:
-  graph: true
-  hybrid: true
+
+# Metadata written by the setup wizard. It does not configure validation behavior.
 ci_cd:
-  strict_validation: true
+  platform: github
 ```
 
-### 3. Commit the config to the repository
+Supported fields are:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `preset` | `personal`, `team`, `enterprise`, `consultant`, or null | Preset selected for this role |
+| `overrides` | mapping | Option values to apply over the selected preset |
+| `fail_on` | `none`, `info`, `warning`, `critical`, or null | Recommendation gate when no preset or `overrides` value supplies it |
+| `essential_only` | boolean or null | Accepted and resolved recommendation setting when no preset or `overrides` value supplies it; it is not currently used to filter formatter output |
+| `max_recommendations` | integer or null | Recommendation display cap when no preset or `overrides` value supplies it; a top-level null is unset, while `overrides.max_recommendations: null` removes the cap |
+| `ci_cd` | mapping | Setup-wizard metadata |
+
+Use Click option names as keys in `overrides`; for example, the graph option is `generate_graph`, not `graph`.
+
+## Precedence
+
+Only options explicitly supplied on the command line override configuration. A Click default is not an explicit CLI option.
+
+For normal options, values are resolved from low to high precedence:
+
+1. Command defaults.
+2. The selected preset.
+3. `.docsible/config.yml` `overrides`.
+4. Explicit CLI options, such as `--graph` or `--no-backup`.
+
+`--preset` selects the preset instead of the role config's `preset`, but role-local `overrides` still apply. The top-level `fail_on`, `essential_only`, and `max_recommendations` fields only fill gaps left by the selected preset and `overrides`; they do not replace those values. Explicit CLI flags always win.
+
+## Presets
+
+| Setting | `personal` | `team` | `enterprise` | `consultant` |
+|---|---|---|---|---|
+| `generate_graph` | false | smart default | true | true |
+| `minimal` | true | smart default | false | false |
+| Markdown validation | enabled | enabled | enabled | enabled |
+| Markdown strictness | false | false | true | false |
+| `auto_fix` | false | true | false | false |
+| `fail_on` | none | warning | critical | warning |
+| `max_recommendations` | 5 | 10 | unlimited | 15 |
+
+For the `team` preset, graph generation, minimal output, and dependency output are left for runtime smart defaults unless configuration or an explicit CLI option supplies a value.
+
+## Role Commands
+
+The documented role commands are:
 
 ```bash
-git add .docsible/config.yml
-git commit -m "chore: add docsible team configuration"
+docsible document role --role ./my-role
+docsible analyze role --role ./my-role
+docsible validate role --role ./my-role
 ```
 
-All team members and CI runners will now use the same preset and analysis thresholds automatically, without having to pass flags on every invocation.
+`document role` generates documentation. `analyze role` runs recommendation analysis without rendering documentation. `validate role` renders the generated Markdown in memory and validates it without writing a README, backup, or `.docsible` file.
 
-### 4. Override per-run as needed
+All three commands accept the following role-oriented options.
 
-CLI flags always take precedence over the config file:
+| Area | Options |
+|---|---|
+| Paths | `--role/-r`, `--collection/-c`, `--playbook/-p` |
+| Output | `--output/-o`, `--append/-a`, `--no-backup/-nob`, `--no-docsible/-nod`, `--dry-run`, `--validate/--no-validate`, `--auto-fix`, `--strict-validation`, `--output-format` (`text` or `json`) |
+| Content | `--minimal`, `--no-vars`, `--no-tasks`, `--no-diagrams`, `--simplify-diagrams`, `--no-examples`, `--no-metadata`, `--no-handlers`, `--include-complexity` |
+| Generation | `--graph/-g`, `--comments/-com`, `--task-line/-tl`, `--complexity-report`, `--simplification-report`, `--show-dependencies`, `--analyze-only` |
+| Recommendations | `--recommendations-only`, `--show-info`, `--advanced-patterns`, `--no-suppress`, `--fail-on` (`none`, `info`, `warning`, or `critical`) |
+| Templates | `--md-role-template` (also `--md-template`, `-rtpl`, `-tpl`), `--md-collection-template/-ctpl`, `--hybrid` |
+| Repository | `--repository-url/-ru`, `--repo-type/-rt`, `--repo-branch/-rb` |
+| Other | `--preset` (`personal`, `team`, `enterprise`, or `consultant`), `--positive/--neutral`, `--help-full` |
+
+`--minimal` hides variables, tasks, diagrams, examples, metadata, and handlers. `--dry-run` does not write files.
+
+## Validation And Recommendation Gates
+
+Markdown validation and recommendation analysis are independent:
+
+- `docsible validate role --role ./my-role` is read-only and validates rendered Markdown in memory. Its command default is strict; use `--no-strict` to disable strict Markdown validation. Preset and config resolution can change that default unless `--strict` or `--no-strict` is explicit.
+- `--strict-validation` on generation commands applies to Markdown validation issues, not recommendation severity.
+- `--fail-on` gates recommendation findings, including findings not displayed because of a display cap. It exits with status 1 for findings at or above its severity: `info`, `warning`, or `critical`. `none` disables this gate.
+
+Examples:
 
 ```bash
-# Temporarily use enterprise strictness on this run
-docsible document role --role . --preset=enterprise
+# Validate generated Markdown without modifying the role.
+docsible validate role --role ./my-role
 
-# Check without failing (ignore fail_on from config)
-docsible validate role --role . --fail-on none
+# Generate docs, but fail CI for warning-level recommendations or worse.
+docsible document role --role ./my-role --fail-on warning
+
+# Run recommendation analysis and emit JSON for a CI consumer.
+docsible analyze role --role ./my-role --output-format json
 ```
 
-See `examples/team-config/` for a ready-to-use team configuration example.
+With `--output-format json`, analysis emits JSON even when there are no visible findings. The payload has `role`, `findings`, `summary`, and `truncated` fields; `findings` is an empty array and summary counts are zero when no findings are present.
 
----
+## CI Example
 
-## Adding a New `scan` Subcommand
+```yaml
+- name: Install Docsible fork
+  run: pip install "git+https://github.com/jier/docsible.git"
 
-The `scan` command group lives in `docsible/commands/scan/` and follows the same pattern used by `analyze` and `document`.
-
-### Module structure
-
-```
-docsible/commands/scan/
-├── __init__.py            # scan_group (Click group), imports and attaches subcommands
-├── collection.py          # `scan collection` subcommand implementation
-├── models/
-│   └── scan_result.py     # RoleResult, ScanCollectionResult dataclasses
-└── formatters/
-    ├── text.py            # Human-readable table output
-    └── json.py            # Machine-readable JSON output
+- name: Validate generated Markdown and gate recommendations
+  run: docsible validate role --role . --fail-on warning
 ```
 
-### Steps to add a new subcommand (e.g. `scan role`)
+## Suppressions
 
-1. **Create the subcommand file** — add `docsible/commands/scan/role.py` with a Click command decorated with `@scan_group.command()`.
-2. **Extend the models** if the new subcommand returns a different result shape — add or extend dataclasses in `models/scan_result.py`.
-3. **Add formatters** — add `text` and `json` formatter functions in the `formatters/` directory, or extend the existing ones.
-4. **Register the subcommand** — import the new command in `docsible/commands/scan/__init__.py` so Click picks it up when `scan_group` is loaded.
-5. **Register `scan_group` in the CLI** — `docsible/cli.py` already attaches `scan_group` to the root CLI; no changes needed there for new subcommands.
+Recommendation suppressions are stored at `<role>/.docsible/suppress.yml`. Use the supported command group to manage them:
 
-Follow the same `--fail-on` / `--output-format` / `--preset` / `--dry-run` conventions used by `scan collection` to keep the interface consistent across the command group.
+```bash
+docsible suppress add "no example playbook" --reason "Examples are maintained elsewhere"
+docsible suppress list
+docsible suppress remove <id>
+docsible suppress clean --dry-run
+```
+
+Pass `--no-suppress` to a role command to include suppressed recommendations.
