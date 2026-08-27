@@ -64,6 +64,7 @@ def validate_role_cmd(preset, strict_validation, **kwargs) -> None:
     kwargs["_explicit_options"] = explicit
     # Validate renders and checks markdown in memory only.
     kwargs["validate_markdown"] = True
+    kwargs["validate_only"] = True
     kwargs["dry_run"] = True
     kwargs["no_docsible"] = True
     kwargs["analyze_only"] = False

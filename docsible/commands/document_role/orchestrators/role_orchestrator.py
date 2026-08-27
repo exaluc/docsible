@@ -82,6 +82,10 @@ class RoleOrchestrator:
         # Step 7: Generate dependency matrix
         dependency_data = self._generate_dependencies(role_info, analysis_report)
 
+        # Validate intent must render before recommendation gates can exit.
+        if self.context.validation.validate_only:
+            self._validate_documentation(role_info, analysis_report, diagrams, dependency_data)
+
         # Step 7.5: Generate recommendations (use validated role_path from step 1)
         recommendations = generate_all_recommendations(role_path)
 
@@ -92,7 +96,7 @@ class RoleOrchestrator:
                 recommendations,
                 base_path=role_path,
             )
-            if suppressed:
+            if suppressed and self.context.analysis.output_format != "json":
                 click.echo(
                     f"  ({len(suppressed)} recommendation(s) suppressed"
                     f" — see 'docsible suppress list')"
@@ -146,10 +150,6 @@ class RoleOrchestrator:
 
         # Step 8: Handle dry-run mode
         if self.context.processing.dry_run:
-            if self.context.validation.validate_markdown:
-                self._validate_documentation(
-                    role_info, role_path, analysis_report, diagrams, dependency_data
-                )
             self._display_dry_run(role_info, role_path, analysis_report, diagrams, dependency_data)
             return
 
@@ -409,7 +409,6 @@ class RoleOrchestrator:
     def _validate_documentation(
         self,
         role_info: dict,
-        role_path: Path,
         analysis_report,
         diagrams: dict,
         dependency_data: dict,
@@ -417,40 +416,49 @@ class RoleOrchestrator:
         """Render generated markdown in memory and validate it without writing files."""
         from docsible.renderers.readme_renderer import ReadmeRenderer
 
-        template_type = "hybrid" if self.context.template.hybrid else "standard_modular"
+        template_type, custom_template, render_options = self._render_options(
+            role_info, analysis_report, diagrams, dependency_data
+        )
         template = ReadmeRenderer().template_processor.get_role_template(
             template_type=template_type,
-            custom_path=str(self.context.template.md_role_template)
-            if self.context.template.md_role_template
-            else None,
+            custom_path=custom_template,
         )
-        markdown = template.render(
-            role=role_info,
-            mermaid_code_per_file=diagrams.get("mermaid_code_per_file", {}),
-            sequence_diagram_high_level=diagrams.get("sequence_diagram_high_level"),
-            sequence_diagram_detailed=diagrams.get("sequence_diagram_detailed"),
-            state_diagram=diagrams.get("state_diagram"),
-            integration_boundary_diagram=diagrams.get("integration_boundary_diagram"),
-            architecture_diagram=diagrams.get("architecture_diagram"),
-            complexity_report=analysis_report,
-            include_complexity=self.context.analysis.include_complexity,
-            dependency_matrix=dependency_data["dependency_matrix"],
-            dependency_summary=dependency_data["dependency_summary"],
-            show_dependency_matrix=dependency_data["show_matrix"],
-            no_vars=self.context.content.no_vars,
-            no_tasks=self.context.content.no_tasks,
-            no_diagrams=self.context.content.no_diagrams,
-            simplify_diagrams=self.context.content.simplify_diagrams,
-            no_examples=self.context.content.no_examples,
-            no_metadata=self.context.content.no_metadata,
-            no_handlers=self.context.content.no_handlers,
-        )
+        markdown = template.render(**render_options)
         renderer = ReadmeRenderer(
             validate=True,
-            auto_fix=False,
+            auto_fix=self.context.validation.auto_fix,
             strict_validation=self.context.validation.strict_validation,
         )
         renderer.markdown_processor.process(renderer.tag_processor.add_tags(markdown))
+
+    def _render_options(
+        self, role_info: dict, analysis_report, diagrams: dict, dependency_data: dict
+    ) -> tuple[str, str | None, dict]:
+        """Build the template inputs shared by normal rendering and validation."""
+        template_type = "hybrid" if self.context.template.hybrid else "standard_modular"
+        custom_template = self.context.template.md_role_template
+        include_complexity = self.context.analysis.include_complexity or self.context.template.hybrid
+        return template_type, str(custom_template) if custom_template else None, {
+            "role": role_info,
+            "mermaid_code_per_file": diagrams.get("mermaid_code_per_file", {}),
+            "sequence_diagram_high_level": diagrams.get("sequence_diagram_high_level"),
+            "sequence_diagram_detailed": diagrams.get("sequence_diagram_detailed"),
+            "state_diagram": diagrams.get("state_diagram"),
+            "integration_boundary_diagram": diagrams.get("integration_boundary_diagram"),
+            "architecture_diagram": diagrams.get("architecture_diagram"),
+            "complexity_report": analysis_report,
+            "include_complexity": include_complexity,
+            "dependency_matrix": dependency_data["dependency_matrix"],
+            "dependency_summary": dependency_data["dependency_summary"],
+            "show_dependency_matrix": dependency_data["show_matrix"],
+            "no_vars": self.context.content.no_vars,
+            "no_tasks": self.context.content.no_tasks,
+            "no_diagrams": self.context.content.no_diagrams,
+            "simplify_diagrams": self.context.content.simplify_diagrams,
+            "no_examples": self.context.content.no_examples,
+            "no_metadata": self.context.content.no_metadata,
+            "no_handlers": self.context.content.no_handlers,
+        }
 
     def _render_documentation(
         self,
@@ -471,13 +479,9 @@ class RoleOrchestrator:
         """
         from docsible.renderers.readme_renderer import ReadmeRenderer
 
-        # Determine template type
-        template_type = "hybrid" if self.context.template.hybrid else "standard_modular"
-
-        # Auto-enable complexity for hybrid mode
-        include_complexity = self.context.analysis.include_complexity
-        if self.context.template.hybrid and not include_complexity:
-            include_complexity = True
+        template_type, custom_template, render_options = self._render_options(
+            role_info, analysis_report, diagrams, dependency_data
+        )
 
         # Create renderer
         renderer = ReadmeRenderer(
@@ -490,34 +494,13 @@ class RoleOrchestrator:
         # Render documentation
         readme_path = role_path / self.context.paths.output
 
-        # Convert Path to str for custom_template_path
-        custom_template = self.context.template.md_role_template
-        custom_template_str = str(custom_template) if custom_template else None
-
         renderer.render_role(
             role_info=role_info,
             output_path=readme_path,
             template_type=template_type,
-            custom_template_path=custom_template_str,
-            mermaid_code_per_file=diagrams.get("mermaid_code_per_file", {}),
-            sequence_diagram_high_level=diagrams.get("sequence_diagram_high_level"),
-            sequence_diagram_detailed=diagrams.get("sequence_diagram_detailed"),
-            state_diagram=diagrams.get("state_diagram"),
-            integration_boundary_diagram=diagrams.get("integration_boundary_diagram"),
-            architecture_diagram=diagrams.get("architecture_diagram"),
-            complexity_report=analysis_report,
-            include_complexity=include_complexity,
-            dependency_matrix=dependency_data["dependency_matrix"],
-            dependency_summary=dependency_data["dependency_summary"],
-            show_dependency_matrix=dependency_data["show_matrix"],
-            no_vars=self.context.content.no_vars,
-            no_tasks=self.context.content.no_tasks,
-            no_diagrams=self.context.content.no_diagrams,
-            simplify_diagrams=self.context.content.simplify_diagrams,
-            no_examples=self.context.content.no_examples,
-            no_metadata=self.context.content.no_metadata,
-            no_handlers=self.context.content.no_handlers,
+            custom_template_path=custom_template,
             append=self.context.processing.append,
+            **{name: value for name, value in render_options.items() if name != "role"},
         )
 
         # Display positive or neutral success message

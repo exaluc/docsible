@@ -190,6 +190,7 @@ class ValidationConfig(BaseModel):
     validate_markdown: bool = Field(False, description="Validate markdown")
     auto_fix: bool = Field(False, description="Auto-fix issues")
     strict_validation: bool = Field(False, description="Fail on validation errors")
+    validate_only: bool = Field(False, description="Validate rendered markdown without writing files")
 
     class ConfigDict:
         """Pydantic configuration."""

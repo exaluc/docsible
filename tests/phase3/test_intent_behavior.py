@@ -1,5 +1,7 @@
 """Regression coverage for intent command behavior."""
 
+import inspect
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -7,6 +9,18 @@ import yaml
 from click.testing import CliRunner
 
 from docsible.cli import cli
+from docsible.commands.document_role.models import (
+    AnalysisConfig,
+    ContentFlags,
+    DiagramConfig,
+    PathConfig,
+    ProcessingConfig,
+    RepositoryConfig,
+    RoleCommandContext,
+    TemplateConfig,
+    ValidationConfig,
+)
+from docsible.commands.document_role.orchestrators.role_orchestrator import RoleOrchestrator
 from docsible.models.recommendation import Recommendation
 from docsible.models.severity import Severity
 from docsible.validation.models import ValidationIssue, ValidationSeverity, ValidationType
@@ -51,6 +65,23 @@ def test_analyze_outputs_json_and_does_not_write_role_files(tmp_path):
     assert not (role / "README.md").exists()
 
 
+def test_analyze_json_keeps_suppression_notice_off_stdout(tmp_path):
+    role = _role(tmp_path)
+    runner = CliRunner()
+
+    with patch(
+        "docsible.commands.document_role.orchestrators.role_orchestrator.generate_all_recommendations",
+        return_value=[_recommendation()],
+    ), patch(
+        "docsible.suppression.engine.apply_suppressions",
+        return_value=([_recommendation()], [_recommendation()]),
+    ):
+        result = runner.invoke(cli, ["analyze", "role", "--role", str(role), "--output-format", "json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["findings"][0]["message"] == "A finding"
+
+
 def test_validate_is_read_only_and_strict_uses_markdown_issues(tmp_path):
     role = _role(tmp_path)
     readme = role / "README.md"
@@ -66,12 +97,63 @@ def test_validate_is_read_only_and_strict_uses_markdown_issues(tmp_path):
         "docsible.commands.document_role.orchestrators.role_orchestrator.generate_all_recommendations",
         return_value=[_recommendation()],
     ):
-        result = runner.invoke(cli, ["validate", "role", "--role", str(role)])
+        result = runner.invoke(
+            cli, ["validate", "role", "--role", str(role), "--fail-on", "warning"]
+        )
 
     assert result.exit_code == 1
     assert "Markdown validation failed" in str(result.exception)
     assert readme.read_text(encoding="utf-8") == "existing documentation\n"
     assert not (role / ".docsible").exists()
+
+
+def test_validate_honors_auto_fix_and_hybrid_render_options(tmp_path):
+    role = _role(tmp_path)
+    runner = CliRunner()
+
+    with patch(
+        "docsible.validation.markdown_fixer.MarkdownFixer.fix_all", side_effect=lambda markdown: markdown
+    ) as fix_all:
+        result = runner.invoke(
+            cli,
+            ["validate", "role", "--role", str(role), "--no-strict", "--auto-fix", "--hybrid"],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert fix_all.called
+
+    context = RoleCommandContext(
+        paths=PathConfig(role_path=role),
+        template=TemplateConfig(hybrid=True),
+        content=ContentFlags(),
+        diagrams=DiagramConfig(),
+        analysis=AnalysisConfig(include_complexity=False),
+        processing=ProcessingConfig(),
+        validation=ValidationConfig(),
+        repository=RepositoryConfig(),
+    )
+    _, _, options = RoleOrchestrator(context)._render_options({}, None, {}, {
+        "dependency_matrix": None,
+        "dependency_summary": None,
+        "show_matrix": False,
+    })
+    assert options["include_complexity"] is True
+
+
+def test_public_complexity_default_is_preserved_and_quality_is_read_only():
+    from docsible.analyzers.complexity_analyzer.analyzers.role_analyzer import (
+        analyze_role_complexity_cached,
+    )
+    from docsible.analyzers.recommendations.quality import QualityRecommendationGenerator
+
+    assert inspect.signature(analyze_role_complexity_cached).parameters["no_docsible"].default is False
+
+    with patch("docsible.analyzers.recommendations.quality.analyze_role_complexity_cached") as analyze:
+        analyze.return_value.category = None
+        analyze.return_value.metrics.total_tasks = 0
+        QualityRecommendationGenerator().analyze_role(Path("/role"))
+
+    assert analyze.call_args.kwargs["no_docsible"] is True
 
 
 def test_document_dry_run_does_not_create_docsible(tmp_path):

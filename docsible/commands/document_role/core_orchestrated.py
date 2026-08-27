@@ -591,6 +591,7 @@ def doc_the_role(**kwargs: Any) -> None:
             validate_markdown=kwargs.get("validate_markdown", False),
             auto_fix=kwargs.get("auto_fix", False),
             strict_validation=kwargs.get("strict_validation", False),
+            validate_only=kwargs.get("validate_only", False),
         ),
         repository=RepositoryConfig(
             repository_url=kwargs.get("repository_url"),
