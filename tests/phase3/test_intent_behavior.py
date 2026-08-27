@@ -82,6 +82,23 @@ def test_analyze_json_keeps_suppression_notice_off_stdout(tmp_path):
     assert json.loads(result.output)["findings"][0]["message"] == "A finding"
 
 
+def test_analyze_json_outputs_empty_findings_when_all_are_suppressed(tmp_path):
+    role = _role(tmp_path)
+    runner = CliRunner()
+
+    with patch(
+        "docsible.commands.document_role.orchestrators.role_orchestrator.generate_all_recommendations",
+        return_value=[_recommendation()],
+    ), patch(
+        "docsible.suppression.engine.apply_suppressions",
+        return_value=([], [_recommendation()]),
+    ):
+        result = runner.invoke(cli, ["analyze", "role", "--role", str(role), "--output-format", "json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["findings"] == []
+
+
 def test_validate_is_read_only_and_strict_uses_markdown_issues(tmp_path):
     role = _role(tmp_path)
     readme = role / "README.md"
@@ -165,6 +182,17 @@ def test_document_dry_run_does_not_create_docsible(tmp_path):
     assert result.exit_code == 0, result.output
     assert not (role / ".docsible").exists()
     assert not (role / "README.md").exists()
+
+
+def test_document_dry_run_validates_generated_markdown(tmp_path):
+    role = _role(tmp_path)
+    runner = CliRunner()
+
+    with patch("docsible.validation.markdown_validator.MarkdownValidator.validate", return_value=[]) as validate:
+        result = runner.invoke(cli, ["document", "role", "--role", str(role), "--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    assert validate.called
 
 
 def test_presets_override_click_defaults_but_explicit_cli_options_win(tmp_path):

@@ -82,8 +82,10 @@ class RoleOrchestrator:
         # Step 7: Generate dependency matrix
         dependency_data = self._generate_dependencies(role_info, analysis_report)
 
-        # Validate intent must render before recommendation gates can exit.
-        if self.context.validation.validate_only:
+        # Validate intent and validating dry runs must render before recommendation gates can exit.
+        if self.context.validation.validate_only or (
+            self.context.processing.dry_run and self.context.validation.validate_markdown
+        ):
             self._validate_documentation(role_info, analysis_report, diagrams, dependency_data)
 
         # Step 7.5: Generate recommendations (use validated role_path from step 1)
@@ -104,7 +106,7 @@ class RoleOrchestrator:
         else:
             suppressed = []
 
-        if recommendations:
+        if recommendations or self.context.analysis.output_format == "json":
             self._display_recommendations(recommendations)
 
         # Recommendation strictness applies to documentation generation only.
