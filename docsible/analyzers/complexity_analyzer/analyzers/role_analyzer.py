@@ -33,7 +33,7 @@ def analyze_role_complexity_cached(
     min_confidence: float = 0.7,
     playbook_content: str | None = None,
     generate_graph: bool = False,
-    no_docsible: bool = False,
+    no_docsible: bool = True,
     comments: bool = False,
     task_line: bool = True,
     belongs_to_collection: dict | None = None,

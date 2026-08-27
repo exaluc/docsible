@@ -461,36 +461,6 @@ def doc_the_role(**kwargs: Any) -> None:
         apply_smart_defaults,
     )
 
-    # Apply minimal flag settings (keep existing helper)
-    minimal = kwargs.get("minimal", False)
-    if minimal:
-        (
-            no_vars,
-            no_tasks,
-            no_diagrams,
-            no_examples,
-            no_metadata,
-            no_handlers,
-            simplify_diagrams,
-        ) = apply_minimal_flag(
-            minimal,
-            kwargs.get("no_vars", False),
-            kwargs.get("no_tasks", False),
-            kwargs.get("no_diagrams", False),
-            kwargs.get("no_examples", False),
-            kwargs.get("no_metadata", False),
-            kwargs.get("no_handlers", False),
-            kwargs.get("simplify_diagrams", False),
-        )
-        # Update kwargs with minimal flag results
-        kwargs["no_vars"] = no_vars
-        kwargs["no_tasks"] = no_tasks
-        kwargs["no_diagrams"] = no_diagrams
-        kwargs["no_examples"] = no_examples
-        kwargs["no_metadata"] = no_metadata
-        kwargs["no_handlers"] = no_handlers
-        kwargs["simplify_diagrams"] = simplify_diagrams
-
     # SMART DEFAULTS INTEGRATION
     # Apply smart defaults based on role complexity (if enabled)
     enable_smart_defaults = os.getenv("DOCSIBLE_ENABLE_SMART_DEFAULTS", "true").lower() == "true"
@@ -498,27 +468,22 @@ def doc_the_role(**kwargs: Any) -> None:
     role_path = kwargs.get("role_path")
     collection_path = kwargs.get("collection_path")
 
-    if enable_smart_defaults and role_path and not collection_path:
+    # Smart-default analysis uses legacy role loading; dry runs must be strictly read-only.
+    if enable_smart_defaults and role_path and not collection_path and not kwargs.get("dry_run", False):
         try:
             from docsible.commands.document_role.helpers import validate_role_path
 
             # Validate role path first to ensure it exists
             temp_validated_path = validate_role_path(role_path)
 
-            # Detect which flags user explicitly set
-            # For now, assume all flags that differ from Click defaults were user-set
-            # This is a simple heuristic - could be improved with Click context
-            user_overrides = {}
-
-            # If user set any of these flags, respect them
-            # (In future, use Click context to detect commandline vs default)
-            # For now, treat any non-default value as user override
-            if kwargs.get("generate_graph") is True:  # Click default is False
-                user_overrides["generate_graph"] = kwargs["generate_graph"]
-            if kwargs.get("minimal") is True:  # Click default is False
-                user_overrides["minimal"] = kwargs["minimal"]
-            if kwargs.get("show_dependencies") is True:  # Click default is False
-                user_overrides["show_dependencies"] = kwargs["show_dependencies"]
+            explicit_options = kwargs.get("_explicit_options", {})
+            user_overrides = {
+                name: explicit_options[name]
+                for name in ("generate_graph", "minimal", "show_dependencies")
+                if name in explicit_options
+            }
+            if kwargs.get("_minimal_explicit", False):
+                user_overrides["minimal"] = kwargs.get("minimal", False)
 
             # Apply smart defaults for non-overridden options
             smart_graph, smart_minimal, smart_deps, complexity_report = apply_smart_defaults(
@@ -536,10 +501,8 @@ def doc_the_role(**kwargs: Any) -> None:
                 if smart_graph:
                     logger.info("Smart default: Enabling graph generation for this role")
 
-            if "minimal" not in user_overrides:
-                kwargs["minimal"] = smart_minimal
-                if smart_minimal:
-                    logger.info("Smart default: Using minimal documentation mode")
+            if smart_minimal and "minimal" not in user_overrides:
+                logger.info("Smart default: Minimal documentation is suggested for this role")
 
             if "show_dependencies" not in user_overrides:
                 kwargs["show_dependencies"] = smart_deps
@@ -550,6 +513,28 @@ def doc_the_role(**kwargs: Any) -> None:
             logger.warning(f"Smart defaults failed: {e}")
             logger.warning("Continuing with manual configuration")
             # Continue with original values
+
+    # Apply minimal settings after smart defaults so derived flags use the final value.
+    minimal = kwargs.get("minimal", False)
+    if minimal:
+        (
+            kwargs["no_vars"],
+            kwargs["no_tasks"],
+            kwargs["no_diagrams"],
+            kwargs["no_examples"],
+            kwargs["no_metadata"],
+            kwargs["no_handlers"],
+            kwargs["simplify_diagrams"],
+        ) = apply_minimal_flag(
+            minimal,
+            kwargs.get("no_vars", False),
+            kwargs.get("no_tasks", False),
+            kwargs.get("no_diagrams", False),
+            kwargs.get("no_examples", False),
+            kwargs.get("no_metadata", False),
+            kwargs.get("no_handlers", False),
+            kwargs.get("simplify_diagrams", False),
+        )
 
     # Build context from parameters
     context = RoleCommandContext(
@@ -598,7 +583,7 @@ def doc_the_role(**kwargs: Any) -> None:
             comments=kwargs.get("comments", False),
             task_line=kwargs.get("task_line", False),
             no_backup=kwargs.get("no_backup", False),
-            no_docsible=kwargs.get("no_docsible", False),
+            no_docsible=kwargs.get("no_docsible", False) or kwargs.get("dry_run", False),
             dry_run=kwargs.get("dry_run", False),
             append=kwargs.get("append", False),
         ),

@@ -46,6 +46,10 @@ class RoleOrchestrator:
         This is the main entry point that coordinates all steps.
         Designed to eventually replace the main function logic in core.py.
         """
+        # Building role data initializes .docsible unless explicitly disabled.
+        if self.context.processing.dry_run:
+            self.context.processing.no_docsible = True
+
         # Step 1: Validate paths
         role_path = self._validate_paths()
 
@@ -57,6 +61,15 @@ class RoleOrchestrator:
 
         # Step 4: Analyze complexity
         analysis_report = self._analyze_complexity(role_info)
+
+        if (
+            self.context.analysis.recommendations_only
+            and self.context.analysis.complexity_report
+            and self.context.analysis.output_format != "json"
+        ):
+            from docsible.utils.console import display_complexity_report
+
+            display_complexity_report(analysis_report, role_name=role_info.get("name"))
 
         # Step 5: Handle analyze-only mode
         if self.context.analysis.analyze_only:
@@ -90,8 +103,13 @@ class RoleOrchestrator:
         if recommendations:
             self._display_recommendations(recommendations)
 
-        # strict_validation: exit 1 if any WARNING/CRITICAL findings (used by 'validate role')
-        if self.context.validation.strict_validation and recommendations:
+        # Recommendation strictness applies to documentation generation only.
+        # Validate intent reserves strictness for markdown validation below.
+        if (
+            self.context.validation.strict_validation
+            and not self.context.validation.validate_markdown
+            and recommendations
+        ):
             from docsible.models.severity import Severity
 
             blocking = [
@@ -128,6 +146,10 @@ class RoleOrchestrator:
 
         # Step 8: Handle dry-run mode
         if self.context.processing.dry_run:
+            if self.context.validation.validate_markdown:
+                self._validate_documentation(
+                    role_info, role_path, analysis_report, diagrams, dependency_data
+                )
             self._display_dry_run(role_info, role_path, analysis_report, diagrams, dependency_data)
             return
 
@@ -176,10 +198,13 @@ class RoleOrchestrator:
         Returns:
             Role information dictionary
         """
+        processing = self.context.processing.model_copy(
+            update={"no_docsible": True}
+        ) if self.context.processing.dry_run else self.context.processing
         return self.role_info_builder.build(
             role_path=role_path,
             playbook_content=playbook_content,
-            processing=self.context.processing,
+            processing=processing,
             repository=self.context.repository,
         )
 
@@ -380,6 +405,52 @@ class RoleOrchestrator:
         )
 
         click.echo(output)
+
+    def _validate_documentation(
+        self,
+        role_info: dict,
+        role_path: Path,
+        analysis_report,
+        diagrams: dict,
+        dependency_data: dict,
+    ) -> None:
+        """Render generated markdown in memory and validate it without writing files."""
+        from docsible.renderers.readme_renderer import ReadmeRenderer
+
+        template_type = "hybrid" if self.context.template.hybrid else "standard_modular"
+        template = ReadmeRenderer().template_processor.get_role_template(
+            template_type=template_type,
+            custom_path=str(self.context.template.md_role_template)
+            if self.context.template.md_role_template
+            else None,
+        )
+        markdown = template.render(
+            role=role_info,
+            mermaid_code_per_file=diagrams.get("mermaid_code_per_file", {}),
+            sequence_diagram_high_level=diagrams.get("sequence_diagram_high_level"),
+            sequence_diagram_detailed=diagrams.get("sequence_diagram_detailed"),
+            state_diagram=diagrams.get("state_diagram"),
+            integration_boundary_diagram=diagrams.get("integration_boundary_diagram"),
+            architecture_diagram=diagrams.get("architecture_diagram"),
+            complexity_report=analysis_report,
+            include_complexity=self.context.analysis.include_complexity,
+            dependency_matrix=dependency_data["dependency_matrix"],
+            dependency_summary=dependency_data["dependency_summary"],
+            show_dependency_matrix=dependency_data["show_matrix"],
+            no_vars=self.context.content.no_vars,
+            no_tasks=self.context.content.no_tasks,
+            no_diagrams=self.context.content.no_diagrams,
+            simplify_diagrams=self.context.content.simplify_diagrams,
+            no_examples=self.context.content.no_examples,
+            no_metadata=self.context.content.no_metadata,
+            no_handlers=self.context.content.no_handlers,
+        )
+        renderer = ReadmeRenderer(
+            validate=True,
+            auto_fix=False,
+            strict_validation=self.context.validation.strict_validation,
+        )
+        renderer.markdown_processor.process(renderer.tag_processor.add_tags(markdown))
 
     def _render_documentation(
         self,

@@ -92,7 +92,7 @@ class ComplexityDetector(Detector):
             # Use cached version which accepts Path directly
             # Note: @cache_by_dir_mtime decorator changes first param to 'path'
             report = analyze_role_complexity_cached(
-                path=role_path, include_patterns=False, min_confidence=0.7
+                path=role_path, include_patterns=False, min_confidence=0.7, no_docsible=True
             )
 
             # Extract metrics and category from report

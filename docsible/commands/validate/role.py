@@ -1,5 +1,7 @@
 """docsible validate role — validate without writing files."""
 
+from pathlib import Path
+
 import click
 
 from docsible.commands.document_role.core_orchestrated import doc_the_role as core_doc_the_role
@@ -40,11 +42,29 @@ from docsible.presets.resolver import resolve_settings
 )
 def validate_role_cmd(preset, strict_validation, **kwargs) -> None:
     """Validate documentation for an Ansible role (no files written)."""
-    resolved = resolve_settings(preset_name=preset, cli_overrides=kwargs)
+    ctx = click.get_current_context()
+    strict_source = ctx.get_parameter_source("strict_validation")
+    # add_output_options supplies the shared false default; validate's default is strict.
+    kwargs["strict_validation"] = (
+        True if strict_source is click.core.ParameterSource.DEFAULT else strict_validation
+    )
+    explicit = {
+        name: value
+        for name, value in kwargs.items()
+        if ctx.get_parameter_source(name) is click.core.ParameterSource.COMMANDLINE
+    }
+    role_path = kwargs.get("role_path")
+    resolved = resolve_settings(
+        preset_name=preset,
+        cli_overrides=explicit,
+        base_path=Path(role_path) if role_path else None,
+    )
+    kwargs["_minimal_explicit"] = "minimal" in resolved
     kwargs.update(resolved)
-    # Force validate intent
+    kwargs["_explicit_options"] = explicit
+    # Validate renders and checks markdown in memory only.
     kwargs["validate_markdown"] = True
-    kwargs["strict_validation"] = strict_validation
     kwargs["dry_run"] = True
+    kwargs["no_docsible"] = True
     kwargs["analyze_only"] = False
     core_doc_the_role(**kwargs)

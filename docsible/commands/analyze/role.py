@@ -1,5 +1,7 @@
 """docsible analyze role — analyze without generating docs."""
 
+from pathlib import Path
+
 import click
 
 from docsible.commands.document_role.core_orchestrated import doc_the_role as core_doc_the_role
@@ -34,9 +36,24 @@ from docsible.presets.resolver import resolve_settings
 )
 def analyze_role_cmd(preset, **kwargs) -> None:
     """Analyze an Ansible role without generating documentation."""
-    resolved = resolve_settings(preset_name=preset, cli_overrides=kwargs)
+    ctx = click.get_current_context()
+    explicit = {
+        name: value
+        for name, value in kwargs.items()
+        if ctx.get_parameter_source(name) is click.core.ParameterSource.COMMANDLINE
+    }
+    role_path = kwargs.get("role_path")
+    resolved = resolve_settings(
+        preset_name=preset,
+        cli_overrides=explicit,
+        base_path=Path(role_path) if role_path else None,
+    )
+    kwargs["_minimal_explicit"] = "minimal" in resolved
     kwargs.update(resolved)
-    # Force analyze intent
-    kwargs["analyze_only"] = True
-    kwargs.setdefault("complexity_report", True)
+    kwargs["_explicit_options"] = explicit
+    # Analyze runs the recommendation pipeline but never renders documentation.
+    kwargs["analyze_only"] = False
+    kwargs["recommendations_only"] = True
+    kwargs["no_docsible"] = True
+    kwargs["complexity_report"] = True
     core_doc_the_role(**kwargs)
