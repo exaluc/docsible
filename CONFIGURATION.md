@@ -114,7 +114,7 @@ All three commands accept the following role-oriented options.
 Markdown validation and recommendation analysis are independent:
 
 - `docsible validate role --role ./my-role` is read-only and validates rendered Markdown in memory. Its command default is strict; use `--no-strict` to disable strict Markdown validation. Preset and config resolution can change that default unless `--strict` or `--no-strict` is explicit.
-- `--strict-validation` on generation commands applies to Markdown validation issues, not recommendation severity.
+- `--strict-validation` makes Markdown validation issues fatal when Markdown validation is enabled. With `--no-validate`, it instead gates WARNING and CRITICAL recommendation findings.
 - `--fail-on` gates recommendation findings, including findings not displayed because of a display cap. It exits with status 1 for findings at or above its severity: `info`, `warning`, or `critical`. `none` disables this gate.
 
 Examples:
