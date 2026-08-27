@@ -77,6 +77,21 @@ npx --yes jscpd docsible
 - The deprecated `docsible role` command is still present alongside the newer
   intent-based command groups.
 
+## Remaining Duplication Work
+
+The source-only duplication scan is below the original baseline, but remaining
+duplication is prioritized by ownership and behavior rather than percentage.
+
+1. Consolidate role-information assembly into one read-only loader used by
+   commands and analyzers. This is the highest priority because duplicate
+   loaders previously produced divergent behavior.
+2. Consider a private helper for repeated integration-provider task traversal
+   after the role-loader migration is complete.
+3. Review overlapping renderer model fields only when a concrete rendering
+   change requires them to move together.
+4. Remove obsolete duplicate tests and generated fixture backups only after
+   confirming they are not test contracts.
+
 ## Scope of This Document
 
 This file records observable project state and commands verified for this
