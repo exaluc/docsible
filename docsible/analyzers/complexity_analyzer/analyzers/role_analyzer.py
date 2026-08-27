@@ -78,20 +78,20 @@ def analyze_role_complexity_cached(
         - Cache invalidates automatically when any role file changes
         - Can disable caching via: configure_caches(enabled=False)
     """
-    from docsible.commands.document_role.core_orchestrated import build_role_info
+    from docsible.commands.role_info_loader import RoleInfoLoader
 
     # Build role info dict (includes role loading, YAML parsing, etc.)
-    role_info = build_role_info(
-        role_path=role_path,
+    role_info = RoleInfoLoader().load(
+        role_path,
         playbook_content=playbook_content,
         generate_graph=generate_graph,
-        no_docsible=no_docsible,
         comments=comments,
         task_line=task_line,
         belongs_to_collection=belongs_to_collection,
         repository_url=repository_url,
         repo_type=repo_type,
         repo_branch=repo_branch,
+        read_docsible=not no_docsible,
     )
 
     # Analyze complexity (expensive operation)

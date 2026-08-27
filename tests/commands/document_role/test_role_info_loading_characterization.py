@@ -7,6 +7,7 @@ import pytest
 from docsible.commands.document_role.builders.role_info_builder import RoleInfoBuilder
 from docsible.commands.document_role.core_orchestrated import build_role_info
 from docsible.commands.document_role.models import ProcessingConfig, RepositoryConfig
+from docsible.commands.role_info_loader import RoleInfoLoader
 
 FIXTURES = Path(__file__).parents[2] / "fixtures"
 
@@ -40,6 +41,7 @@ def _builder_role_info(
     role_path: Path,
     *,
     playbook_content: str | None = None,
+    generate_graph: bool = False,
     comments: bool = False,
     task_line: bool = False,
     belongs_to_collection: dict | None = None,
@@ -55,6 +57,7 @@ def _builder_role_info(
         ),
         repository=repository or RepositoryConfig(),
         belongs_to_collection=belongs_to_collection,
+        generate_graph=generate_graph,
     )
 
 
@@ -108,6 +111,7 @@ def test_read_only_assemblers_match_for_playbook_repository_and_collection_data(
     builder = _builder_role_info(
         role_path,
         playbook_content=playbook_content,
+        generate_graph=True,
         belongs_to_collection=collection,
         repository=repository,
     )
@@ -160,3 +164,18 @@ def test_read_only_assemblers_do_not_create_docsible(tmp_path: Path) -> None:
     assert builder == legacy
     assert builder["docsible"] is None
     assert not (role_path / ".docsible").exists()
+
+
+def test_loader_keeps_docsible_read_only_and_graph_independent(tmp_path: Path) -> None:
+    role_path = tmp_path / "role"
+    role_path.mkdir()
+    (role_path / ".docsible").write_text("custom: value\n", encoding="utf-8")
+    playbook = "- hosts: all\n  roles:\n    - other_role\n"
+
+    role_info = RoleInfoLoader().load(
+        role_path, playbook_content=playbook, read_docsible=True, generate_graph=False
+    )
+
+    assert role_info["docsible"] == {"custom": "value"}
+    assert role_info["playbook"]["graph"] is None
+    assert (role_path / ".docsible").read_text(encoding="utf-8") == "custom: value\n"

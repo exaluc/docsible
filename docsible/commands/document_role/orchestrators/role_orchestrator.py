@@ -10,8 +10,8 @@ from pathlib import Path
 import click
 
 from docsible.analyzers.recommendations import generate_all_recommendations
-from docsible.commands.document_role.builders.role_info_builder import RoleInfoBuilder
 from docsible.commands.document_role.models import RoleCommandContext
+from docsible.commands.role_info_loader import RoleInfoLoader
 from docsible.formatters.text.dry_run import DryRunFormatter
 from docsible.models.recommendation import Recommendation
 
@@ -37,7 +37,7 @@ class RoleOrchestrator:
             context: Complete role command context with all configuration
         """
         self.context = context
-        self.role_info_builder = RoleInfoBuilder()
+        self.role_info_loader = RoleInfoLoader()
         self.dry_run_formatter = DryRunFormatter()
 
     def execute(self) -> None:
@@ -46,10 +46,6 @@ class RoleOrchestrator:
         This is the main entry point that coordinates all steps.
         Designed to eventually replace the main function logic in core.py.
         """
-        # Building role data initializes .docsible unless explicitly disabled.
-        if self.context.processing.dry_run:
-            self.context.processing.no_docsible = True
-
         # Step 1: Validate paths
         role_path = self._validate_paths()
 
@@ -200,14 +196,16 @@ class RoleOrchestrator:
         Returns:
             Role information dictionary
         """
-        processing = self.context.processing.model_copy(
-            update={"no_docsible": True}
-        ) if self.context.processing.dry_run else self.context.processing
-        return self.role_info_builder.build(
-            role_path=role_path,
+        return self.role_info_loader.load(
+            role_path,
             playbook_content=playbook_content,
-            processing=processing,
-            repository=self.context.repository,
+            generate_graph=self.context.diagrams.generate_graph,
+            comments=self.context.processing.comments,
+            task_line=self.context.processing.task_line,
+            repository_url=self.context.repository.repository_url,
+            repo_type=self.context.repository.repo_type,
+            repo_branch=self.context.repository.repo_branch,
+            read_docsible=not self.context.processing.no_docsible,
         )
 
     def _analyze_complexity(self, role_info: dict):
@@ -480,6 +478,10 @@ class RoleOrchestrator:
             dependency_data: Dependency matrix data
         """
         from docsible.renderers.readme_renderer import ReadmeRenderer
+        from docsible.renderers.tag_manager import manage_docsible_file_keys
+
+        if not self.context.processing.no_docsible:
+            role_info["docsible"] = manage_docsible_file_keys(role_path / ".docsible")
 
         template_type, custom_template, render_options = self._render_options(
             role_info, analysis_report, diagrams, dependency_data

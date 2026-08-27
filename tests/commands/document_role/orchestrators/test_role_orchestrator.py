@@ -59,7 +59,7 @@ class TestRoleOrchestrator:
         """Test RoleOrchestrator initialization."""
         orchestrator = RoleOrchestrator(minimal_context)
         assert orchestrator.context == minimal_context
-        assert orchestrator.role_info_builder is not None
+        assert orchestrator.role_info_loader is not None
         assert orchestrator.dry_run_formatter is not None
 
     def test_validate_paths_success(self, temp_role_dir, minimal_context):
