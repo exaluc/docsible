@@ -12,9 +12,9 @@ from docsible.commands.document_role.options import (
     add_recommendation_options,
     add_repository_options,
     add_template_options,
+    resolve_role_command_options,
 )
 from docsible.presets.registry import PresetRegistry
-from docsible.presets.resolver import resolve_settings
 from docsible.utils.cli_helpers import BriefHelpCommand
 
 
@@ -35,6 +35,4 @@ from docsible.utils.cli_helpers import BriefHelpCommand
 )
 def document_role_cmd(preset, **kwargs) -> None:
     """Generate documentation for an Ansible role."""
-    resolved = resolve_settings(preset_name=preset, cli_overrides=kwargs)
-    kwargs.update(resolved)
-    core_doc_the_role(**kwargs)
+    core_doc_the_role(**resolve_role_command_options(preset, kwargs))

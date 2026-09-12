@@ -14,7 +14,7 @@ class QualityRecommendationGenerator:
         recommendations = []
 
         # Get complexity analysis
-        complexity = analyze_role_complexity_cached(role_path)
+        complexity = analyze_role_complexity_cached(role_path, no_docsible=True)
 
         # Check documentation vs complexity
         # Only recommend task descriptions for complex roles

@@ -1,5 +1,3 @@
-import pytest
-from pathlib import Path
 
 from docsible.analyzers.complexity_analyzer.models import (
     ComplexityCategory,
@@ -10,7 +8,6 @@ from docsible.formatters.text.positive import PositiveFormatter
 from docsible.models.enhancement import Difficulty, Enhancement
 from docsible.models.recommendation import Recommendation
 from docsible.models.severity import Severity
-
 
 # ---------------------------------------------------------------------------
 # Helpers / shared fixtures

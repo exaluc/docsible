@@ -1,13 +1,16 @@
 # Standard Python project metadata (PEP 621) - works with uv, pip, pyenv
 [project]
-name = "docsible"
+name = "docsible-jier"
 version = "0.9.0"
-description = "Document generator for ansible role/collection"
+description = "An explicitly attributed fork of Docsible for Ansible role and collection documentation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Lucian BLETAN", email = "neuraluc@gmail.com"}
+]
+maintainers = [
+    {name = "Jier Nzuanzu", email = "jiernzuanzu@gmail.com"}
 ]
 keywords = ["ansible", "documentation", "roles", "collections", "readme", "markdown"]
 classifiers = [
@@ -39,17 +42,15 @@ dependencies = [
 ]
 
 # =========================================================
-# Optional dependencies for development
+# Development dependencies
 # =========================================================
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
+    "build>=1.2.2",
+    "pytest>=7.4.4",
     "ruff>=0.14.8",
     "mypy>=1.10",
     "types-PyYAML>=6.0",
-]
-
-test = [
-    "pytest>=7.4.4",
 ]
 
 # =========================================================
@@ -97,10 +98,10 @@ addopts = [
 # =========================================================
 # URLs for project
 [project.urls]
-Homepage = "https://github.com/docsible/docsible"
-Repository = "https://github.com/docsible/docsible"
-Issues = "https://github.com/docsible/docsible/issues"
-Documentation = "https://github.com/docsible/docsible"
+Homepage = "https://github.com/jier/docsible"
+Repository = "https://github.com/jier/docsible"
+Issues = "https://github.com/jier/docsible/issues"
+Upstream = "https://github.com/docsible/docsible"
 
 # =========================================================
 # Project cli entrypoint
@@ -128,38 +129,3 @@ include = [
     "/LICENSE",
     "/CONFIGURATION.md",
 ]
-
-#########################################################################
-# Poetry configuration (for backward compatibility) soon to be deprecated
-#########################################################################
-[tool.poetry]
-name = "docsible"
-version = "0.9.0"
-description = "Document generator for ansible role/collection"
-authors = ["Lucian BLETAN <neuraluc@gmail.com>"]
-repository = "https://github.com/docsible/docsible"
-license = "MIT"
-readme = "README.md"
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Environment :: Console",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: POSIX",
-    "Operating System :: MacOS",
-    "Operating System :: Unix",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3",
-    "Topic :: Software Development :: Libraries :: Python Modules"
-]
-
-[tool.poetry.dependencies]
-python = ">=3.10"
-click = "^8.1.7"
-PyYAML = "^6.0.1"
-Jinja2 = "^3.1.2"
-pydantic = "^2.0.0"
-
-
-[tool.poetry.scripts]
-docsible = 'docsible.cli:cli'

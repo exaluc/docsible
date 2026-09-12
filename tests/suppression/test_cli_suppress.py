@@ -3,14 +3,12 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 import yaml
 from click.testing import CliRunner, Result
 
 from docsible.commands.suppress import suppress_group
 from docsible.models.suppression import SuppressionRule, SuppressionStore
 from docsible.suppression.store import save_store
-
 
 # ---------------------------------------------------------------------------
 # Helpers

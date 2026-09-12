@@ -12,9 +12,9 @@ from docsible.commands.document_role.options import (
     add_recommendation_options,
     add_repository_options,
     add_template_options,
+    resolve_role_command_options,
 )
 from docsible.presets.registry import PresetRegistry
-from docsible.presets.resolver import resolve_settings
 
 
 @click.command(name="role")
@@ -34,9 +34,10 @@ from docsible.presets.resolver import resolve_settings
 )
 def analyze_role_cmd(preset, **kwargs) -> None:
     """Analyze an Ansible role without generating documentation."""
-    resolved = resolve_settings(preset_name=preset, cli_overrides=kwargs)
-    kwargs.update(resolved)
-    # Force analyze intent
-    kwargs["analyze_only"] = True
-    kwargs.setdefault("complexity_report", True)
+    kwargs = resolve_role_command_options(preset, kwargs)
+    # Analyze runs the recommendation pipeline but never renders documentation.
+    kwargs["analyze_only"] = False
+    kwargs["recommendations_only"] = True
+    kwargs["no_docsible"] = True
+    kwargs["complexity_report"] = True
     core_doc_the_role(**kwargs)

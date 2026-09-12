@@ -2,8 +2,6 @@
 
 import re
 
-import pytest
-
 from docsible.suppression.id_gen import generate_rule_id
 
 

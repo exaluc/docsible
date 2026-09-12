@@ -87,42 +87,25 @@ docsible --help
 ### Using uv (Fastest)
 
 ```bash
-# Clone repository
-git clone https://github.com/docsible/docsible.git
+# Clone this fork
+git clone https://github.com/jier/docsible.git
 cd docsible
 
-# Install in editable mode with uv
-uv pip install -e .
+# Install the project and its development dependency group
+uv sync --group dev
 
 # Run tests
-python -m pytest tests/
+uv run pytest tests/
 
 # Run docsible
-docsible document role --role tests/fixtures/simple_role --graph
-```
-
-### Using Poetry
-
-```bash
-# Clone repository
-git clone https://github.com/docsible/docsible.git
-cd docsible
-
-# Install dependencies
-poetry install
-
-# Run tests
-poetry run pytest tests/
-
-# Run docsible
-poetry run docsible document role --role tests/fixtures/simple_role --graph
+uv run docsible document role --role tests/fixtures/simple_role --graph
 ```
 
 ### Using pip (Traditional)
 
 ```bash
-# Clone repository
-git clone https://github.com/docsible/docsible.git
+# Clone this fork
+git clone https://github.com/jier/docsible.git
 cd docsible
 
 # Create virtual environment
@@ -132,8 +115,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install in editable mode
 pip install -e .
 
-# Run tests
-pytest tests/
+# For tests, linting, and builds, use the uv development setup above.
 
 # Run docsible
 docsible document role --role tests/fixtures/simple_role --graph
@@ -154,7 +136,6 @@ docsible document role --role tests/fixtures/simple_role --graph
 |------|-------|----------|
 | **uv** | ⚡ Fastest | Modern development, CI/CD |
 | **pip** | 🐢 Slower | Traditional, simple setups |
-| **Poetry** | 🐌 Slowest | Existing Poetry projects |
 
 ## Supported Python Versions
 
@@ -188,7 +169,7 @@ The following commands are available in this release:
 | `docsible suppress` | Manage suppression rules (silence specific warnings) |
 | `docsible init` | Interactive setup wizard for configuration |
 
-**Presets:** Use `--preset personal|team|enterprise|consulting` to apply a predefined configuration profile to any command.
+**Presets:** Use `--preset personal|team|enterprise|consultant` to apply a predefined configuration profile to any command.
 
 ## Troubleshooting
 
@@ -241,11 +222,14 @@ pip install -e .
 - name: Install uv
   run: pip install uv
 
+- name: Check lockfile sync
+  run: uv lock --check
+
 - name: Install dependencies
-  run: uv pip install -e .
+  run: uv sync --locked --group dev
 
 - name: Run docsible
-  run: docsible --role ./my-role --graph
+  run: uv run docsible document role --role ./my-role --graph
 ```
 
 ### Using pip in GitHub Actions
@@ -260,7 +244,7 @@ pip install -e .
   run: pip install -e .
 
 - name: Run docsible
-  run: docsible --role ./my-role --graph
+  run: docsible document role --role ./my-role --graph
 ```
 
 ## Building from Source
@@ -278,15 +262,6 @@ python -m build
 pip install dist/docsible-0.9.0-py3-none-any.whl
 ```
 
-### Using Poetry
-
-```bash
-# Build with poetry
-poetry build
-
-# Install built wheel
-pip install dist/docsible-0.9.0-py3-none-any.whl
-```
 
 ## Performance Optimization
 

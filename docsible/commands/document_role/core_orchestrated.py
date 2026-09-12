@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 import click
-import yaml
 
 from docsible.commands.document_role.helpers import apply_minimal_flag
 from docsible.commands.document_role.models import (
@@ -25,21 +24,8 @@ from docsible.commands.document_role.models import (
     ValidationConfig,
 )
 from docsible.commands.document_role.orchestrators import RoleOrchestrator
-from docsible.diagrams.mermaid import (
-    generate_mermaid_playbook,
-)
+from docsible.commands.role_info_loader import RoleInfoLoader
 from docsible.exceptions import CollectionNotFoundError
-from docsible.renderers.tag_manager import manage_docsible_file_keys
-from docsible.utils.git import get_repo_info
-from docsible.utils.project_structure import ProjectStructure
-from docsible.utils.special_tasks_keys import process_special_task_keys
-from docsible.utils.yaml import (
-    get_task_comments,
-    get_task_line_numbers,
-    get_task_line_ranges,
-    load_yaml_files_from_dir_custom,
-    load_yaml_generic,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -70,61 +56,7 @@ def extract_playbook_role_dependencies(
         >>> extract_playbook_role_dependencies(content, 'webserver')
         ['common']
     """
-    if not playbook_content:
-        return []
-
-    try:
-        playbook = yaml.safe_load(playbook_content)
-        if not isinstance(playbook, list):
-            return []
-
-        role_names = set()
-
-        for play in playbook:
-            if not isinstance(play, dict):
-                continue
-
-            # Extract from roles: section
-            roles = play.get("roles", [])
-            for role in roles:
-                if isinstance(role, str):
-                    role_name = role
-                elif isinstance(role, dict):
-                    role_name = str(role.get("role") or role.get("name") or "")
-                else:
-                    continue
-
-                if role_name and role_name != current_role_name:
-                    role_names.add(role_name)
-
-            # Extract from include_role/import_role in tasks sections
-            for section in ["pre_tasks", "tasks", "post_tasks"]:
-                tasks = play.get(section, [])
-                if not isinstance(tasks, list):
-                    continue
-
-                for task in tasks:
-                    if not isinstance(task, dict):
-                        continue
-
-                    for action in ["include_role", "import_role"]:
-                        if action in task:
-                            role_spec = task[action]
-                            if isinstance(role_spec, str):
-                                role_name = role_spec
-                            elif isinstance(role_spec, dict):
-                                role_name = str(role_spec.get("name", ""))
-                            else:
-                                continue
-
-                            if role_name and role_name != current_role_name:
-                                role_names.add(role_name)
-
-        return sorted(list(role_names))
-
-    except Exception as e:
-        logger.warning(f"Could not extract playbook role dependencies: {e}")
-        return []
+    return RoleInfoLoader()._playbook_dependencies(playbook_content, current_role_name)
 
 
 def build_role_info(
@@ -156,153 +88,18 @@ def build_role_info(
     Returns:
         Dictionary with complete role information
     """
-    project_structure = ProjectStructure(str(role_path))
-    role_name = role_path.name
-    docsible_path = role_path / ".docsible"
-
-    # Handle .docsible metadata file
-    if not no_docsible:
-        manage_docsible_file_keys(docsible_path)
-
-    # Get meta file path
-    meta_path = project_structure.get_meta_file(role_path)
-    if meta_path is None:
-        logger.warning(f"No meta file found for role {role_name}")
-        meta_path = role_path / "meta" / "main.yml"  # Fallback
-
-    # Get argument specs
-    argument_specs_path = project_structure.get_argument_specs_file(role_path)
-    argument_specs = None
-    if argument_specs_path and argument_specs_path.exists():
-        argument_specs = load_yaml_generic(argument_specs_path)
-
-    # Get defaults and vars
-    defaults_dir = project_structure.get_defaults_dir(role_path)
-    vars_dir = project_structure.get_vars_dir(role_path)
-    defaults_data = load_yaml_files_from_dir_custom(defaults_dir) or []
-    vars_data = load_yaml_files_from_dir_custom(vars_dir) or []
-
-    # Detect repository info if requested
-    if repository_url == "detect":
-        try:
-            git_info = get_repo_info(str(role_path)) or {}
-            repository_url = git_info.get("repository")
-            repo_branch = repo_branch or git_info.get("branch", "main")
-            repo_type = repo_type or git_info.get("repository_type")
-        except Exception as e:
-            logger.warning(f"Could not get Git info: {e}")
-            repository_url = None
-
-    # Extract playbook role dependencies
-    playbook_dependencies = extract_playbook_role_dependencies(playbook_content, role_name)
-
-    # Build base role info
-    role_info = {
-        "name": role_name,
-        "defaults": defaults_data,
-        "vars": vars_data,
-        "tasks": [],
-        "handlers": [],
-        "meta": load_yaml_generic(meta_path) if meta_path.exists() else {},
-        "playbook": {
-            "content": playbook_content,
-            "graph": (
-                generate_mermaid_playbook(yaml.safe_load(playbook_content))
-                if generate_graph and playbook_content
-                else None
-            ),
-            "dependencies": playbook_dependencies,
-        },
-        "docsible": load_yaml_generic(docsible_path) if not no_docsible else None,
-        "belongs_to_collection": belongs_to_collection,
-        "repository": repository_url,
-        "repository_type": repo_type,
-        "repository_branch": repo_branch,
-        "argument_specs": argument_specs,
-    }
-
-    # Extract tasks
-    tasks_dir = project_structure.get_tasks_dir(role_path)
-    if tasks_dir.exists() and tasks_dir.is_dir():
-        yaml_extensions = project_structure.get_yaml_extensions()
-
-        for dirpath, _, filenames in os.walk(str(tasks_dir)):
-            for task_file in filenames:
-                if any(task_file.endswith(ext) for ext in yaml_extensions):
-                    file_path = Path(dirpath) / task_file
-                    tasks_data = load_yaml_generic(file_path)
-
-                    if tasks_data:
-                        relative_path = file_path.relative_to(tasks_dir)
-                        from typing import Any
-
-                        task_info: dict[str, Any] = {
-                            "file": str(relative_path),
-                            "tasks": [],
-                            "mermaid": [],
-                            "comments": [],
-                            "lines": [],
-                            "line_ranges": [],
-                        }
-
-                        if comments:
-                            task_info["comments"] = get_task_comments(str(file_path))
-                        if task_line:
-                            task_info["lines"] = get_task_line_numbers(str(file_path))
-
-                        # Always extract line ranges for phase detection (lightweight operation)
-                        try:
-                            task_info["line_ranges"] = get_task_line_ranges(str(file_path))
-                        except Exception as e:
-                            logger.debug(f"Could not extract line ranges for {file_path}: {e}")
-
-                        if isinstance(tasks_data, list):
-                            for task in tasks_data:
-                                if isinstance(task, dict) and task:
-                                    processed_tasks = process_special_task_keys(task)
-                                    task_info["tasks"].extend(processed_tasks)
-                                    task_info["mermaid"].append(task)
-
-                            role_info["tasks"].append(task_info)
-
-    # Extract handlers
-    handlers_dir = role_path / "handlers"
-    if handlers_dir.exists() and handlers_dir.is_dir():
-        yaml_extensions = project_structure.get_yaml_extensions()
-
-        for dirpath, _, filenames in os.walk(str(handlers_dir)):
-            for handler_file in filenames:
-                if any(handler_file.endswith(ext) for ext in yaml_extensions):
-                    file_path = Path(dirpath) / handler_file
-                    handlers_data = load_yaml_generic(file_path)
-
-                    if handlers_data and isinstance(handlers_data, list):
-                        for handler in handlers_data:
-                            if isinstance(handler, dict) and "name" in handler:
-                                handler_info = {
-                                    "name": handler.get("name", "Unnamed handler"),
-                                    "module": next(
-                                        (
-                                            k
-                                            for k in handler.keys()
-                                            if k
-                                            not in [
-                                                "name",
-                                                "notify",
-                                                "when",
-                                                "tags",
-                                                "listen",
-                                            ]
-                                        ),
-                                        "unknown",
-                                    ),
-                                    "listen": handler.get("listen", []),
-                                    "file": str(Path(file_path).relative_to(handlers_dir)),
-                                }
-                                role_info["handlers"].append(handler_info)
-
-    return role_info
-
+    return RoleInfoLoader().load(
+        role_path,
+        playbook_content=playbook_content,
+        generate_graph=generate_graph,
+        comments=comments,
+        task_line=task_line,
+        belongs_to_collection=belongs_to_collection,
+        repository_url=repository_url,
+        repo_type=repo_type,
+        repo_branch=repo_branch,
+        read_docsible=not no_docsible,
+    )
 
 def _display_dry_run_summary(
     role_info: dict,
@@ -461,36 +258,6 @@ def doc_the_role(**kwargs: Any) -> None:
         apply_smart_defaults,
     )
 
-    # Apply minimal flag settings (keep existing helper)
-    minimal = kwargs.get("minimal", False)
-    if minimal:
-        (
-            no_vars,
-            no_tasks,
-            no_diagrams,
-            no_examples,
-            no_metadata,
-            no_handlers,
-            simplify_diagrams,
-        ) = apply_minimal_flag(
-            minimal,
-            kwargs.get("no_vars", False),
-            kwargs.get("no_tasks", False),
-            kwargs.get("no_diagrams", False),
-            kwargs.get("no_examples", False),
-            kwargs.get("no_metadata", False),
-            kwargs.get("no_handlers", False),
-            kwargs.get("simplify_diagrams", False),
-        )
-        # Update kwargs with minimal flag results
-        kwargs["no_vars"] = no_vars
-        kwargs["no_tasks"] = no_tasks
-        kwargs["no_diagrams"] = no_diagrams
-        kwargs["no_examples"] = no_examples
-        kwargs["no_metadata"] = no_metadata
-        kwargs["no_handlers"] = no_handlers
-        kwargs["simplify_diagrams"] = simplify_diagrams
-
     # SMART DEFAULTS INTEGRATION
     # Apply smart defaults based on role complexity (if enabled)
     enable_smart_defaults = os.getenv("DOCSIBLE_ENABLE_SMART_DEFAULTS", "true").lower() == "true"
@@ -498,27 +265,22 @@ def doc_the_role(**kwargs: Any) -> None:
     role_path = kwargs.get("role_path")
     collection_path = kwargs.get("collection_path")
 
-    if enable_smart_defaults and role_path and not collection_path:
+    # Smart-default analysis uses legacy role loading; dry runs must be strictly read-only.
+    if enable_smart_defaults and role_path and not collection_path and not kwargs.get("dry_run", False):
         try:
             from docsible.commands.document_role.helpers import validate_role_path
 
             # Validate role path first to ensure it exists
             temp_validated_path = validate_role_path(role_path)
 
-            # Detect which flags user explicitly set
-            # For now, assume all flags that differ from Click defaults were user-set
-            # This is a simple heuristic - could be improved with Click context
-            user_overrides = {}
-
-            # If user set any of these flags, respect them
-            # (In future, use Click context to detect commandline vs default)
-            # For now, treat any non-default value as user override
-            if kwargs.get("generate_graph") is True:  # Click default is False
-                user_overrides["generate_graph"] = kwargs["generate_graph"]
-            if kwargs.get("minimal") is True:  # Click default is False
-                user_overrides["minimal"] = kwargs["minimal"]
-            if kwargs.get("show_dependencies") is True:  # Click default is False
-                user_overrides["show_dependencies"] = kwargs["show_dependencies"]
+            explicit_options = kwargs.get("_explicit_options", {})
+            user_overrides = {
+                name: explicit_options[name]
+                for name in ("generate_graph", "minimal", "show_dependencies")
+                if name in explicit_options
+            }
+            if kwargs.get("_minimal_explicit", False):
+                user_overrides["minimal"] = kwargs.get("minimal", False)
 
             # Apply smart defaults for non-overridden options
             smart_graph, smart_minimal, smart_deps, complexity_report = apply_smart_defaults(
@@ -536,10 +298,8 @@ def doc_the_role(**kwargs: Any) -> None:
                 if smart_graph:
                     logger.info("Smart default: Enabling graph generation for this role")
 
-            if "minimal" not in user_overrides:
-                kwargs["minimal"] = smart_minimal
-                if smart_minimal:
-                    logger.info("Smart default: Using minimal documentation mode")
+            if smart_minimal and "minimal" not in user_overrides:
+                logger.info("Smart default: Minimal documentation is suggested for this role")
 
             if "show_dependencies" not in user_overrides:
                 kwargs["show_dependencies"] = smart_deps
@@ -550,6 +310,28 @@ def doc_the_role(**kwargs: Any) -> None:
             logger.warning(f"Smart defaults failed: {e}")
             logger.warning("Continuing with manual configuration")
             # Continue with original values
+
+    # Apply minimal settings after smart defaults so derived flags use the final value.
+    minimal = kwargs.get("minimal", False)
+    if minimal:
+        (
+            kwargs["no_vars"],
+            kwargs["no_tasks"],
+            kwargs["no_diagrams"],
+            kwargs["no_examples"],
+            kwargs["no_metadata"],
+            kwargs["no_handlers"],
+            kwargs["simplify_diagrams"],
+        ) = apply_minimal_flag(
+            minimal,
+            kwargs.get("no_vars", False),
+            kwargs.get("no_tasks", False),
+            kwargs.get("no_diagrams", False),
+            kwargs.get("no_examples", False),
+            kwargs.get("no_metadata", False),
+            kwargs.get("no_handlers", False),
+            kwargs.get("simplify_diagrams", False),
+        )
 
     # Build context from parameters
     context = RoleCommandContext(
@@ -598,7 +380,7 @@ def doc_the_role(**kwargs: Any) -> None:
             comments=kwargs.get("comments", False),
             task_line=kwargs.get("task_line", False),
             no_backup=kwargs.get("no_backup", False),
-            no_docsible=kwargs.get("no_docsible", False),
+            no_docsible=kwargs.get("no_docsible", False) or kwargs.get("dry_run", False),
             dry_run=kwargs.get("dry_run", False),
             append=kwargs.get("append", False),
         ),
@@ -606,6 +388,7 @@ def doc_the_role(**kwargs: Any) -> None:
             validate_markdown=kwargs.get("validate_markdown", False),
             auto_fix=kwargs.get("auto_fix", False),
             strict_validation=kwargs.get("strict_validation", False),
+            validate_only=kwargs.get("validate_only", False),
         ),
         repository=RepositoryConfig(
             repository_url=kwargs.get("repository_url"),

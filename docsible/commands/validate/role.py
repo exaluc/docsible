@@ -12,9 +12,9 @@ from docsible.commands.document_role.options import (
     add_recommendation_options,
     add_repository_options,
     add_template_options,
+    resolve_role_command_options,
 )
 from docsible.presets.registry import PresetRegistry
-from docsible.presets.resolver import resolve_settings
 
 
 @click.command(name="role")
@@ -40,11 +40,17 @@ from docsible.presets.resolver import resolve_settings
 )
 def validate_role_cmd(preset, strict_validation, **kwargs) -> None:
     """Validate documentation for an Ansible role (no files written)."""
-    resolved = resolve_settings(preset_name=preset, cli_overrides=kwargs)
-    kwargs.update(resolved)
-    # Force validate intent
+    ctx = click.get_current_context()
+    strict_source = ctx.get_parameter_source("strict_validation")
+    # add_output_options supplies the shared false default; validate's default is strict.
+    kwargs["strict_validation"] = (
+        True if strict_source is click.core.ParameterSource.DEFAULT else strict_validation
+    )
+    kwargs = resolve_role_command_options(preset, kwargs)
+    # Validate renders and checks markdown in memory only.
     kwargs["validate_markdown"] = True
-    kwargs["strict_validation"] = strict_validation
+    kwargs["validate_only"] = True
     kwargs["dry_run"] = True
+    kwargs["no_docsible"] = True
     kwargs["analyze_only"] = False
     core_doc_the_role(**kwargs)

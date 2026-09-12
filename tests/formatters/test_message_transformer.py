@@ -1,9 +1,9 @@
 import pytest
+
 from docsible.formatters.text.message import MessageTransformer
 from docsible.models.enhancement import Difficulty, Enhancement
 from docsible.models.recommendation import Recommendation
 from docsible.models.severity import Severity
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -23,7 +23,7 @@ MINIMAL_COLLECTION = FIXTURES / "minimal_collection"
 MULTI_ROLE_COLLECTION = FIXTURES / "multi_role_collection"
 
 
-def _invoke(*args: str) -> "click.testing.Result":  # type: ignore[name-defined]
+def _invoke(*args: str) -> click.testing.Result:  # type: ignore[name-defined]
     runner = CliRunner()
     return runner.invoke(cli, ["scan", "collection", *args], catch_exceptions=False)
 

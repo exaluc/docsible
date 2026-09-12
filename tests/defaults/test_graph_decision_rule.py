@@ -1,6 +1,6 @@
+from docsible.analyzers.complexity_analyzer.models import ComplexityCategory as Category
 from docsible.defaults.decisions.base import DecisionContext
 from docsible.defaults.decisions.graph_rule import GraphDecisionRule
-from docsible.analyzers.complexity_analyzer.models import ComplexityCategory as Category
 
 
 class TestGraphDecisionRule:

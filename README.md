@@ -4,11 +4,18 @@
 
 Docsible is a command-line interface (CLI) written in Python that automates the documentation of Ansible roles and collections. It generates a Markdown-formatted README file for a role or collection by scanning the Ansible YAML files.
 
-Project home: https://github.com/docsible/docsible
+## Fork and Attribution
+
+This is an independently maintained fork of [Docsible](https://github.com/docsible/docsible), maintained by [Jier Nzuanzu](https://github.com/jier). The original project and its authors, including Lucian BLETAN, retain attribution for upstream work.
+
+Fork-specific work focuses on modularization, intent-based CLI commands, presets, suppression rules, caching, analysis, and CI-oriented output. See the [upstream repository](https://github.com/docsible/docsible) for the original project.
+
+Project home: https://github.com/jier/docsible
 
 ## Table of Contents
 
 - [Features](#features)
+- [Fork and Attribution](#fork-and-attribution)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [CI/CD Integration](#cicd-integration)
@@ -65,10 +72,10 @@ python3 -m venv docsible-env
 source docsible-env/bin/activate
 ```
 
-Install from PyPI:
+Install this fork directly from GitHub:
 
 ```bash
-pip install docsible
+pip install git+https://github.com/jier/docsible.git
 ```
 
 ## Quick Start

@@ -1,8 +1,10 @@
 """Tests for the guide command."""
-import pytest
 from pathlib import Path
+
+import pytest
 from click.testing import CliRunner
-from docsible.commands.guide import guide_command, AVAILABLE_TOPICS, GUIDES_DIR
+
+from docsible.commands.guide import AVAILABLE_TOPICS, GUIDES_DIR, guide_command
 
 
 class TestGuideCommandConstants:

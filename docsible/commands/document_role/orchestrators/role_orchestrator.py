@@ -10,8 +10,8 @@ from pathlib import Path
 import click
 
 from docsible.analyzers.recommendations import generate_all_recommendations
-from docsible.commands.document_role.builders.role_info_builder import RoleInfoBuilder
 from docsible.commands.document_role.models import RoleCommandContext
+from docsible.commands.role_info_loader import RoleInfoLoader
 from docsible.formatters.text.dry_run import DryRunFormatter
 from docsible.models.recommendation import Recommendation
 
@@ -37,7 +37,7 @@ class RoleOrchestrator:
             context: Complete role command context with all configuration
         """
         self.context = context
-        self.role_info_builder = RoleInfoBuilder()
+        self.role_info_loader = RoleInfoLoader()
         self.dry_run_formatter = DryRunFormatter()
 
     def execute(self) -> None:
@@ -58,6 +58,15 @@ class RoleOrchestrator:
         # Step 4: Analyze complexity
         analysis_report = self._analyze_complexity(role_info)
 
+        if (
+            self.context.analysis.recommendations_only
+            and self.context.analysis.complexity_report
+            and self.context.analysis.output_format != "json"
+        ):
+            from docsible.utils.console import display_complexity_report
+
+            display_complexity_report(analysis_report, role_name=role_info.get("name"))
+
         # Step 5: Handle analyze-only mode
         if self.context.analysis.analyze_only:
             self._display_analysis_and_exit(analysis_report, role_info)
@@ -69,6 +78,12 @@ class RoleOrchestrator:
         # Step 7: Generate dependency matrix
         dependency_data = self._generate_dependencies(role_info, analysis_report)
 
+        # Validate intent and validating dry runs must render before recommendation gates can exit.
+        if self.context.validation.validate_only or (
+            self.context.processing.dry_run and self.context.validation.validate_markdown
+        ):
+            self._validate_documentation(role_info, analysis_report, diagrams, dependency_data)
+
         # Step 7.5: Generate recommendations (use validated role_path from step 1)
         recommendations = generate_all_recommendations(role_path)
 
@@ -79,7 +94,7 @@ class RoleOrchestrator:
                 recommendations,
                 base_path=role_path,
             )
-            if suppressed:
+            if suppressed and self.context.analysis.output_format != "json":
                 click.echo(
                     f"  ({len(suppressed)} recommendation(s) suppressed"
                     f" — see 'docsible suppress list')"
@@ -87,11 +102,16 @@ class RoleOrchestrator:
         else:
             suppressed = []
 
-        if recommendations:
+        if recommendations or self.context.analysis.output_format == "json":
             self._display_recommendations(recommendations)
 
-        # strict_validation: exit 1 if any WARNING/CRITICAL findings (used by 'validate role')
-        if self.context.validation.strict_validation and recommendations:
+        # Recommendation strictness applies to documentation generation only.
+        # Validate intent reserves strictness for markdown validation below.
+        if (
+            self.context.validation.strict_validation
+            and not self.context.validation.validate_markdown
+            and recommendations
+        ):
             from docsible.models.severity import Severity
 
             blocking = [
@@ -176,11 +196,16 @@ class RoleOrchestrator:
         Returns:
             Role information dictionary
         """
-        return self.role_info_builder.build(
-            role_path=role_path,
+        return self.role_info_loader.load(
+            role_path,
             playbook_content=playbook_content,
-            processing=self.context.processing,
-            repository=self.context.repository,
+            generate_graph=self.context.diagrams.generate_graph,
+            comments=self.context.processing.comments,
+            task_line=self.context.processing.task_line,
+            repository_url=self.context.repository.repository_url,
+            repo_type=self.context.repository.repo_type,
+            repo_branch=self.context.repository.repo_branch,
+            read_docsible=not self.context.processing.no_docsible,
         )
 
     def _analyze_complexity(self, role_info: dict):
@@ -381,6 +406,60 @@ class RoleOrchestrator:
 
         click.echo(output)
 
+    def _validate_documentation(
+        self,
+        role_info: dict,
+        analysis_report,
+        diagrams: dict,
+        dependency_data: dict,
+    ) -> None:
+        """Render generated markdown in memory and validate it without writing files."""
+        from docsible.renderers.readme_renderer import ReadmeRenderer
+
+        template_type, custom_template, render_options = self._render_options(
+            role_info, analysis_report, diagrams, dependency_data
+        )
+        template = ReadmeRenderer().template_processor.get_role_template(
+            template_type=template_type,
+            custom_path=custom_template,
+        )
+        markdown = template.render(**render_options)
+        renderer = ReadmeRenderer(
+            validate=True,
+            auto_fix=self.context.validation.auto_fix,
+            strict_validation=self.context.validation.strict_validation,
+        )
+        renderer.markdown_processor.process(renderer.tag_processor.add_tags(markdown))
+
+    def _render_options(
+        self, role_info: dict, analysis_report, diagrams: dict, dependency_data: dict
+    ) -> tuple[str, str | None, dict]:
+        """Build the template inputs shared by normal rendering and validation."""
+        template_type = "hybrid" if self.context.template.hybrid else "standard_modular"
+        custom_template = self.context.template.md_role_template
+        include_complexity = self.context.analysis.include_complexity or self.context.template.hybrid
+        return template_type, str(custom_template) if custom_template else None, {
+            "role": role_info,
+            "mermaid_code_per_file": diagrams.get("mermaid_code_per_file", {}),
+            "sequence_diagram_high_level": diagrams.get("sequence_diagram_high_level"),
+            "sequence_diagram_detailed": diagrams.get("sequence_diagram_detailed"),
+            "state_diagram": diagrams.get("state_diagram"),
+            "integration_boundary_diagram": diagrams.get("integration_boundary_diagram"),
+            "architecture_diagram": diagrams.get("architecture_diagram"),
+            "complexity_report": analysis_report,
+            "include_complexity": include_complexity,
+            "dependency_matrix": dependency_data["dependency_matrix"],
+            "dependency_summary": dependency_data["dependency_summary"],
+            "show_dependency_matrix": dependency_data["show_matrix"],
+            "no_vars": self.context.content.no_vars,
+            "no_tasks": self.context.content.no_tasks,
+            "no_diagrams": self.context.content.no_diagrams,
+            "simplify_diagrams": self.context.content.simplify_diagrams,
+            "no_examples": self.context.content.no_examples,
+            "no_metadata": self.context.content.no_metadata,
+            "no_handlers": self.context.content.no_handlers,
+        }
+
     def _render_documentation(
         self,
         role_info: dict,
@@ -399,14 +478,14 @@ class RoleOrchestrator:
             dependency_data: Dependency matrix data
         """
         from docsible.renderers.readme_renderer import ReadmeRenderer
+        from docsible.renderers.tag_manager import manage_docsible_file_keys
 
-        # Determine template type
-        template_type = "hybrid" if self.context.template.hybrid else "standard_modular"
+        if not self.context.processing.no_docsible:
+            role_info["docsible"] = manage_docsible_file_keys(role_path / ".docsible")
 
-        # Auto-enable complexity for hybrid mode
-        include_complexity = self.context.analysis.include_complexity
-        if self.context.template.hybrid and not include_complexity:
-            include_complexity = True
+        template_type, custom_template, render_options = self._render_options(
+            role_info, analysis_report, diagrams, dependency_data
+        )
 
         # Create renderer
         renderer = ReadmeRenderer(
@@ -419,34 +498,13 @@ class RoleOrchestrator:
         # Render documentation
         readme_path = role_path / self.context.paths.output
 
-        # Convert Path to str for custom_template_path
-        custom_template = self.context.template.md_role_template
-        custom_template_str = str(custom_template) if custom_template else None
-
         renderer.render_role(
             role_info=role_info,
             output_path=readme_path,
             template_type=template_type,
-            custom_template_path=custom_template_str,
-            mermaid_code_per_file=diagrams.get("mermaid_code_per_file", {}),
-            sequence_diagram_high_level=diagrams.get("sequence_diagram_high_level"),
-            sequence_diagram_detailed=diagrams.get("sequence_diagram_detailed"),
-            state_diagram=diagrams.get("state_diagram"),
-            integration_boundary_diagram=diagrams.get("integration_boundary_diagram"),
-            architecture_diagram=diagrams.get("architecture_diagram"),
-            complexity_report=analysis_report,
-            include_complexity=include_complexity,
-            dependency_matrix=dependency_data["dependency_matrix"],
-            dependency_summary=dependency_data["dependency_summary"],
-            show_dependency_matrix=dependency_data["show_matrix"],
-            no_vars=self.context.content.no_vars,
-            no_tasks=self.context.content.no_tasks,
-            no_diagrams=self.context.content.no_diagrams,
-            simplify_diagrams=self.context.content.simplify_diagrams,
-            no_examples=self.context.content.no_examples,
-            no_metadata=self.context.content.no_metadata,
-            no_handlers=self.context.content.no_handlers,
+            custom_template_path=custom_template,
             append=self.context.processing.append,
+            **{name: value for name, value in render_options.items() if name != "role"},
         )
 
         # Display positive or neutral success message

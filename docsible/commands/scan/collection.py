@@ -50,17 +50,16 @@ def _analyse_role(role_path: Path, git_info: dict) -> RoleResult:
     """
     from docsible.analyzers import analyze_role_complexity
     from docsible.analyzers.recommendations import generate_all_recommendations
-    from docsible.commands.document_role.core_orchestrated import build_role_info
+    from docsible.commands.role_info_loader import RoleInfoLoader
     from docsible.models.severity import Severity
 
     role_name = role_path.name
 
     # Build role info (no README writes — analysis only)
-    role_info = build_role_info(
-        role_path=role_path,
+    role_info = RoleInfoLoader().load(
+        role_path,
         playbook_content=None,
         generate_graph=False,
-        no_docsible=True,  # skip .docsible file writes
         comments=False,
         task_line=False,
         belongs_to_collection=None,

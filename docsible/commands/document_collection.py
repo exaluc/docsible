@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from docsible.commands.document_role import build_role_info
+from docsible.commands.role_info_loader import RoleInfoLoader
 from docsible.exceptions import CollectionNotFoundError
 from docsible.renderers.readme_renderer import ReadmeRenderer
 from docsible.utils.git import get_repo_info
@@ -144,20 +144,25 @@ def document_collection_roles(
                         logger.error(f"Error loading playbook for {role_name}: {e}")
 
                 # Build role info
-                role_info = build_role_info(
-                    role_path=role_path,
+                role_info = RoleInfoLoader().load(
+                    role_path,
                     playbook_content=playbook_content,
                     generate_graph=graph,
-                    no_docsible=no_docsible,
                     comments=comments,
                     task_line=task_line,
                     belongs_to_collection=collection_metadata,
                     repository_url=repository_url,
                     repo_type=repo_type,
                     repo_branch=repo_branch,
+                    read_docsible=not no_docsible,
                 )
 
                 # Generate role README
+                if not no_docsible:
+                    from docsible.renderers.tag_manager import manage_docsible_file_keys
+
+                    role_info["docsible"] = manage_docsible_file_keys(role_path / ".docsible")
+
                 renderer = ReadmeRenderer(backup=not no_backup)
                 role_readme_path = role_path / output
                 template_type = "hybrid" if hybrid else "standard_modular"
