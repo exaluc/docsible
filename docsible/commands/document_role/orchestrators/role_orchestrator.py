@@ -146,9 +146,12 @@ class RoleOrchestrator:
             # Only show recommendations, don't generate documentation
             return
 
-        # Step 8: Handle dry-run mode
+        # Step 8: Handle dry-run mode (JSON mode carries machine output only)
         if self.context.processing.dry_run:
-            self._display_dry_run(role_info, role_path, analysis_report, diagrams, dependency_data)
+            if self.context.analysis.output_format != "json":
+                self._display_dry_run(
+                    role_info, role_path, analysis_report, diagrams, dependency_data
+                )
             return
 
         # Step 9: Render documentation

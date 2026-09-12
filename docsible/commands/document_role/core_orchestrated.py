@@ -6,6 +6,7 @@ orchestrator pattern via RoleOrchestrator.
 
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -257,6 +258,12 @@ def doc_the_role(**kwargs: Any) -> None:
     from docsible.commands.document_role.smart_defaults_integration import (
         apply_smart_defaults,
     )
+
+    # In JSON mode, redirect logging to stderr so stdout carries only valid JSON
+    if kwargs.get("output_format") == "json":
+        for handler in logging.root.handlers:
+            if isinstance(handler, logging.StreamHandler) and handler.stream is sys.stdout:
+                handler.stream = sys.stderr
 
     # SMART DEFAULTS INTEGRATION
     # Apply smart defaults based on role complexity (if enabled)

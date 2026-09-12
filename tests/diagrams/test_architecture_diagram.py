@@ -125,8 +125,8 @@ class TestArchitectureDiagram:
         assert "5 tasks" in diagram
         assert "10 tasks" in diagram
         assert "3 tasks" in diagram
-        # Should show flow from first to last
-        assert "tasks_install_yml --> tasks_validate_yml" in diagram
+        # No include data: no inter-file flow edges should be fabricated
+        assert "tasks_install_yml --> tasks_validate_yml" not in diagram
 
     def test_generate_with_handlers(self):
         """Test diagram with handlers."""
@@ -236,7 +236,14 @@ class TestArchitectureDiagram:
                 {
                     "file": "install.yml",
                     "tasks": [
-                        {"name": f"Task {i}", "module": "package"} for i in range(12)
+                        {"name": f"Task {i}", "module": "package"} for i in range(11)
+                    ]
+                    + [
+                        {
+                            "name": "Include configure",
+                            "module": "include_tasks",
+                            "include_target": "configure.yml",
+                        }
                     ],
                 },
                 {
@@ -292,9 +299,70 @@ class TestArchitectureDiagram:
         # Check data flow (variables flow to first task file)
         assert "defaults --> tasks_install_yml" in diagram
         assert "vars --> tasks_install_yml" in diagram
-        assert "tasks_install_yml --> tasks_configure_yml" in diagram
+        # Statically resolvable include becomes a labeled edge
+        assert 'tasks_install_yml -."includes".-> tasks_configure_yml' in diagram
         assert "notify" in diagram
         assert "tasks_configure_yml --> external" in diagram
+
+    def test_generate_with_include_edges(self):
+        """Include/import targets become edges; templated targets are skipped."""
+        role_info = {
+            "name": "test_role",
+            "defaults": [],
+            "vars": [],
+            "tasks": [
+                {
+                    "file": "main.yml",
+                    "tasks": [
+                        {"name": "Load OS vars", "module": "include_vars"},
+                        {
+                            "name": "Unnamed",
+                            "module": "include_tasks",
+                            "include_target": "{{ ansible_facts['os_family'] }}.yml",
+                        },
+                        {
+                            "name": "Unnamed",
+                            "module": "import_tasks",
+                            "include_target": "setup.yml",
+                        },
+                        {
+                            "name": "Unnamed",
+                            "module": "include",
+                            "include_target": "extra.yml",
+                        },
+                    ],
+                },
+                {"file": "setup.yml", "tasks": [{"name": "Setup"}]},
+                {"file": "subdir/extra.yml", "tasks": [{"name": "Extra"}]},
+                {"file": "orphan.yml", "tasks": [{"name": "Orphan"}]},
+            ],
+            "handlers": [],
+        }
+
+        complexity_report = ComplexityReport(
+            metrics=ComplexityMetrics(
+                total_tasks=7,
+                task_files=4,
+                handlers=0,
+                conditional_tasks=0,
+                max_tasks_per_file=4,
+                avg_tasks_per_file=1.75,
+            ),
+            category=ComplexityCategory.SIMPLE,
+            integration_points=[],
+        )
+
+        diagram = generate_component_architecture(role_info, complexity_report)
+
+        assert diagram is not None
+        # Exact-match target
+        assert 'tasks_main_yml -."includes".-> tasks_setup_yml' in diagram
+        # Basename match against nested file
+        assert 'tasks_main_yml -."includes".-> tasks_subdir_extra_yml' in diagram
+        # Templated target must not be drawn as an edge
+        assert "os_family" not in diagram
+        # No fabricated edges to unrelated files
+        assert "--> tasks_orphan_yml" not in diagram
 
     def test_generate_with_no_role_info(self):
         """Test that None is returned when role_info is None."""

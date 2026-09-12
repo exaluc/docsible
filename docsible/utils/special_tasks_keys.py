@@ -169,6 +169,7 @@ def process_special_task_keys(
     else:
         # Specific modules without 'action' key
         for key in (
+            "include",
             "include_tasks",
             "import_tasks",
             "import_playbook",
@@ -188,12 +189,27 @@ def process_special_task_keys(
         ]
         task_module = module_keys[0] if module_keys else "unknown"
 
-    tasks.append(
-        {
-            "name": escape_pipes(task_name),
-            "module": task_module if task_module != "unknown" else "",  # Blank if unknown
-            "type": task_type,
-            "when": task_when,
-        }
-    )
+    # Capture statically resolvable include/import targets for diagram edges
+    include_target: str | None = None
+    short_module = task_module.split(".")[-1]
+    if short_module in ("include", "include_tasks", "import_tasks", "include_role", "import_role"):
+        raw_target = task.get(task_module)
+        if isinstance(raw_target, str):
+            escaped_target = escape_pipes(raw_target)
+            if isinstance(escaped_target, str):
+                include_target = escaped_target
+        elif isinstance(raw_target, dict) and isinstance(raw_target.get("file"), str):
+            escaped_target = escape_pipes(raw_target["file"])
+            if isinstance(escaped_target, str):
+                include_target = escaped_target
+
+    processed_task: dict[str, Any] = {
+        "name": escape_pipes(task_name),
+        "module": task_module if task_module != "unknown" else "",  # Blank if unknown
+        "type": task_type,
+        "when": task_when,
+    }
+    if include_target is not None:
+        processed_task["include_target"] = include_target
+    tasks.append(processed_task)
     return tasks

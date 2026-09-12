@@ -114,11 +114,37 @@ def generate_component_architecture(
         if vars_count > 0:
             lines.append(f"    vars --> {first_task_id}")
 
-    # Task file sequential flow (simplified - show first -> last)
-    if len(task_files) > 1:
-        first_id = f"tasks_{task_files[0].get('file', 'file0').replace('.', '_').replace('/', '_')}"
-        last_id = f"tasks_{task_files[-1].get('file', 'fileN').replace('.', '_').replace('/', '_')}"
-        lines.append(f"    {first_id} --> {last_id}")
+    # Include/import flow between task files (statically resolvable targets only;
+    # templated targets are dynamic and are deliberately not drawn as edges)
+    task_file_ids = {
+        task_file.get("file", f"file{idx}"): (
+            f"tasks_{task_file.get('file', f'file{idx}').replace('.', '_').replace('/', '_')}"
+        )
+        for idx, task_file in enumerate(task_files)
+    }
+    task_file_ids_by_basename: dict[str, str] = {}
+    for file_name, node_id in task_file_ids.items():
+        task_file_ids_by_basename.setdefault(file_name.split("/")[-1], node_id)
+    added_include_edges: set[tuple[str, str]] = set()
+    for task_file in task_files:
+        file_name = task_file.get("file", "")
+        source_id = task_file_ids.get(file_name)
+        if not source_id:
+            continue
+        for task in task_file.get("tasks", []):
+            target = task.get("include_target")
+            if not target or "{{" in target:
+                continue
+            target_id = task_file_ids.get(target) or task_file_ids_by_basename.get(
+                target.split("/")[-1]
+            )
+            if (
+                target_id
+                and target_id != source_id
+                and (source_id, target_id) not in added_include_edges
+            ):
+                lines.append(f'    {source_id} -."includes".-> {target_id}')
+                added_include_edges.add((source_id, target_id))
 
     # Tasks to handlers (notification)
     if task_files and handlers_count > 0:
