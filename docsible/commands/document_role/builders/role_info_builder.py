@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 from docsible.commands.document_role.models import ProcessingConfig, RepositoryConfig
@@ -6,7 +7,11 @@ from docsible.utils.project_structure import ProjectStructure
 
 
 class RoleInfoBuilder:
-    """Compatibility facade for :class:`RoleInfoLoader`."""
+    """Compatibility facade for :class:`RoleInfoLoader`.
+
+    .. deprecated:: 0.9.0
+        Use :class:`docsible.commands.role_info_loader.RoleInfoLoader` directly.
+    """
 
     def __init__(self, project_structure: ProjectStructure | None = None):
         """Initialize RoleInfoBuilder.
@@ -15,6 +20,12 @@ class RoleInfoBuilder:
             project_structure: Optional ProjectStructure instance.
                 If None, will be created from role_path during build().
         """
+        warnings.warn(
+            "RoleInfoBuilder is deprecated and will be removed in a future release. "
+            "Use docsible.commands.role_info_loader.RoleInfoLoader directly.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.project_structure = project_structure
         self.loader = RoleInfoLoader(project_structure)
 

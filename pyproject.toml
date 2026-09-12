@@ -10,7 +10,7 @@ authors = [
     {name = "Lucian BLETAN", email = "neuraluc@gmail.com"}
 ]
 maintainers = [
-    {name = "Jier Nzuanzu", email = "6737870+jier@users.noreply.github.com"}
+    {name = "Jier Nzuanzu", email = "jiernzuanzu@gmail.com"}
 ]
 keywords = ["ansible", "documentation", "roles", "collections", "readme", "markdown"]
 classifiers = [

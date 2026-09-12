@@ -223,7 +223,9 @@ pip install -e .
   run: pip install uv
 
 - name: Install dependencies
-  run: uv sync --group dev
+  run: |
+    uv sync --locked --check
+    uv sync --locked --group dev
 
 - name: Run docsible
   run: uv run docsible document role --role ./my-role --graph

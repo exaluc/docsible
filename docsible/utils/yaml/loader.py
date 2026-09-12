@@ -38,8 +38,11 @@ def load_yaml_generic(filepath: str | Path) -> dict[str, Any] | None:
         with open(filepath, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return cast(dict[str, Any] | None, data)
-    except (FileNotFoundError, yaml.constructor.ConstructorError) as e:
+    except (FileNotFoundError, yaml.YAMLError, OSError) as e:
         logger.error(f"Error loading {filepath}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error loading {filepath}: {e}")
         return None
 
 

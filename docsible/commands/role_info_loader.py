@@ -47,6 +47,7 @@ class RoleInfoLoader:
         ``read_docsible`` reads an existing metadata file only. This loader never
         creates or updates ``.docsible``.
         """
+        role_path = Path(role_path).resolve()
         project_structure = self.project_structure or ProjectStructure(str(role_path))
         role_name = role_path.name
         meta_path = project_structure.get_meta_file(role_path)
@@ -60,6 +61,33 @@ class RoleInfoLoader:
         argument_specs_path = project_structure.get_argument_specs_file(role_path)
         docsible_path = role_path / ".docsible"
 
+        meta_data: dict[str, Any] = {}
+        if meta_path.exists():
+            try:
+                loaded_meta = load_yaml_generic(meta_path)
+                if isinstance(loaded_meta, dict):
+                    meta_data = loaded_meta
+                elif loaded_meta is None:
+                    logger.debug("Meta file %s is empty or invalid", meta_path)
+                else:
+                    logger.warning("Meta file %s does not contain a dictionary", meta_path)
+            except Exception as exc:
+                logger.warning("Failed to load meta file %s: %s", meta_path, exc)
+
+        argument_specs_data = None
+        if argument_specs_path and argument_specs_path.exists():
+            try:
+                argument_specs_data = load_yaml_generic(argument_specs_path)
+            except Exception as exc:
+                logger.warning("Failed to load argument specs file %s: %s", argument_specs_path, exc)
+
+        docsible_data = None
+        if read_docsible and docsible_path.exists():
+            try:
+                docsible_data = load_yaml_generic(docsible_path)
+            except Exception as exc:
+                logger.warning("Failed to load .docsible file %s: %s", docsible_path, exc)
+
         return {
             "name": role_name,
             "defaults": load_yaml_files_from_dir_custom(project_structure.get_defaults_dir(role_path))
@@ -67,18 +95,14 @@ class RoleInfoLoader:
             "vars": load_yaml_files_from_dir_custom(project_structure.get_vars_dir(role_path)) or [],
             "tasks": self._tasks_info(project_structure, role_path, comments, task_line),
             "handlers": self._handlers_info(project_structure, role_path),
-            "meta": load_yaml_generic(meta_path) if meta_path.exists() else {},
+            "meta": meta_data,
             "playbook": self._playbook_info(playbook_content, role_name, generate_graph),
-            "docsible": load_yaml_generic(docsible_path)
-            if read_docsible and docsible_path.exists()
-            else None,
+            "docsible": docsible_data,
             "belongs_to_collection": belongs_to_collection,
             "repository": repository_url,
             "repository_type": repo_type,
             "repository_branch": repo_branch,
-            "argument_specs": load_yaml_generic(argument_specs_path)
-            if argument_specs_path and argument_specs_path.exists()
-            else None,
+            "argument_specs": argument_specs_data,
         }
 
     def _tasks_info(
@@ -94,8 +118,13 @@ class RoleInfoLoader:
                 if not any(filename.endswith(ext) for ext in project_structure.get_yaml_extensions()):
                     continue
                 file_path = Path(dirpath) / filename
-                tasks_data = load_yaml_generic(file_path)
+                try:
+                    tasks_data = load_yaml_generic(file_path)
+                except Exception as exc:
+                    logger.warning("Failed to load tasks file %s: %s", file_path, exc)
+                    continue
                 if not tasks_data:
+                    logger.debug("Tasks file %s is empty or invalid", file_path)
                     continue
                 task_info: dict[str, Any] = {
                     "file": str(file_path.relative_to(tasks_dir)),
@@ -128,8 +157,14 @@ class RoleInfoLoader:
                 if not any(filename.endswith(ext) for ext in project_structure.get_yaml_extensions()):
                     continue
                 file_path = Path(dirpath) / filename
-                handler_data = load_yaml_generic(file_path)
+                try:
+                    handler_data = load_yaml_generic(file_path)
+                except Exception as exc:
+                    logger.warning("Failed to load handlers file %s: %s", file_path, exc)
+                    continue
                 if not isinstance(handler_data, list):
+                    if handler_data is not None:
+                        logger.debug("Handlers file %s does not contain a list", file_path)
                     continue
                 for handler in handler_data:
                     if not (isinstance(handler, dict) and "name" in handler):
@@ -170,7 +205,7 @@ class RoleInfoLoader:
             playbook = yaml.safe_load(playbook_content)
             if not isinstance(playbook, list):
                 return []
-            dependencies = set()
+            dependencies: set[str] = set()
             for play in playbook:
                 if not isinstance(play, dict):
                     continue
