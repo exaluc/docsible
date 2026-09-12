@@ -1,5 +1,4 @@
 """Tests for docsible.presets.resolver — resolve_settings()."""
-import pytest
 import yaml
 
 from docsible.presets.resolver import resolve_settings

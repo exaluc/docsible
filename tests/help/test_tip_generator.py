@@ -1,5 +1,4 @@
 """Tests for TipGenerator."""
-import pytest
 from docsible.helpers.tips.tip_generator import TipGenerator
 
 

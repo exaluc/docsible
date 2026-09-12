@@ -19,7 +19,6 @@ from docsible.commands.document_role.orchestrators.role_orchestrator import Role
 from docsible.models.recommendation import Recommendation
 from docsible.models.severity import Severity
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

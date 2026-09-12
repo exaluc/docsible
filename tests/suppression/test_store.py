@@ -3,12 +3,10 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 import yaml
 
 from docsible.models.suppression import SuppressionRule, SuppressionStore
 from docsible.suppression.store import load_store, resolve_suppress_path, save_store
-
 
 # ---------------------------------------------------------------------------
 # Helpers

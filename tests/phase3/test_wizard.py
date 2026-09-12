@@ -1,6 +1,5 @@
 """Tests for docsible.commands.wizard — wizard_init command."""
 import yaml
-import pytest
 from click.testing import CliRunner
 
 from docsible.commands.wizard import wizard_init

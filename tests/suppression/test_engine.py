@@ -5,13 +5,11 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
 import yaml
 
 from docsible.models.suppression import SuppressionRule, SuppressionStore
 from docsible.suppression.engine import apply_suppressions
-from docsible.suppression.store import save_store, resolve_suppress_path
-
+from docsible.suppression.store import save_store
 
 # ---------------------------------------------------------------------------
 # Helpers

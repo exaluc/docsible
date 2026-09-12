@@ -7,12 +7,10 @@ Covers:
 - resolve_settings(): config-level top-level fields flow into resolved kwargs
 """
 import yaml
-import pytest
 
 from docsible.presets.models import DocsiblePresetConfig
 from docsible.presets.registry import PresetRegistry
 from docsible.presets.resolver import resolve_settings
-
 
 # ---------------------------------------------------------------------------
 # Registry — per-preset analysis field values

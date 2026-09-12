@@ -1,7 +1,7 @@
 """Tests for BriefHelpFormatter."""
-import pytest
 import click
 from click.testing import CliRunner
+
 from docsible.formatters.help.brief import BriefHelpFormatter
 
 

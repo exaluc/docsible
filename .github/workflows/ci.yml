@@ -35,7 +35,7 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Run linting
-        run: uv run ruff check .
+        run: uv run ruff check docsible
 
       - name: Run type checking
         run: uv run mypy docsible

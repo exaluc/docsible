@@ -15,7 +15,6 @@ tests/fixtures/edge_case_role/:
 import shutil
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from docsible.cli import cli

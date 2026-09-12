@@ -1,6 +1,6 @@
+from docsible.analyzers.complexity_analyzer.models import ComplexityCategory as Category
 from docsible.defaults.decisions.base import DecisionContext
 from docsible.defaults.decisions.minimal_rule import MinimalModeRule
-from docsible.analyzers.complexity_analyzer.models import ComplexityCategory as Category
 
 
 class TestMinimalModeRule:

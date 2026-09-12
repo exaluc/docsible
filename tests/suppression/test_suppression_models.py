@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from docsible.models.suppression import SuppressionRule, SuppressionStore
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

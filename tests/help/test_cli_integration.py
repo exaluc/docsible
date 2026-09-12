@@ -1,7 +1,8 @@
 """Integration tests for brief/full help CLI behavior."""
 import sys
-import pytest
 from unittest.mock import patch
+
+import pytest
 from click.testing import CliRunner
 
 
@@ -100,6 +101,7 @@ class TestGroupedHelpCommandExists:
 
     def test_grouped_help_command_is_click_command(self):
         import click
+
         from docsible.utils.cli_helpers import GroupedHelpCommand
         assert issubclass(GroupedHelpCommand, click.Command)
 

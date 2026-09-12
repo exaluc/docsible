@@ -1,8 +1,6 @@
 """Tests for docsible.presets.config_manager — ConfigManager and resolve_config_path."""
-import os
 from pathlib import Path
 
-import pytest
 import yaml
 
 from docsible.presets.config_manager import ConfigManager, resolve_config_path

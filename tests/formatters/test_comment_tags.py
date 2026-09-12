@@ -15,7 +15,6 @@ The fixture under tests/fixtures/annotated_role contains:
 import shutil
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from docsible.cli import cli

@@ -1,16 +1,13 @@
 """Tests for intent-based CLI commands: document, analyze, validate."""
-import pytest
-from unittest import mock
 from click.testing import CliRunner
 
 from docsible.cli import cli
-from docsible.commands.document import document_group
-from docsible.commands.document.role import document_role_cmd
 from docsible.commands.analyze import analyze_group
 from docsible.commands.analyze.role import analyze_role_cmd
+from docsible.commands.document import document_group
+from docsible.commands.document.role import document_role_cmd
 from docsible.commands.validate import validate_group
 from docsible.commands.validate.role import validate_role_cmd
-
 
 # ---------------------------------------------------------------------------
 # document role --help
