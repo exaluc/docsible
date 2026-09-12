@@ -155,7 +155,9 @@ class RoleOrchestrator:
             return
 
         # Step 9: Render documentation
-        self._render_documentation(role_info, role_path, analysis_report, diagrams, dependency_data)
+        self._render_documentation(
+            role_info, role_path, analysis_report, diagrams, dependency_data, recommendations
+        )
 
     def _validate_paths(self) -> Path:
         """Validate and return role path.
@@ -327,6 +329,7 @@ class RoleOrchestrator:
         analysis_report,
         diagrams: dict,
         dependency_data: dict,
+        recommendations: list[Recommendation],
     ) -> None:
         """Display dry-run summary.
 
@@ -336,6 +339,7 @@ class RoleOrchestrator:
             analysis_report: Complexity analysis report
             diagrams: Generated diagrams dictionary
             dependency_data: Dependency matrix data
+            recommendations: Findings to reflect in the success summary
         """
         flags = {
             "generate_graph": self.context.diagrams.generate_graph,
@@ -518,7 +522,7 @@ class RoleOrchestrator:
             success_msg = formatter.format_success(
                 output_file=readme_path,
                 complexity=analysis_report,
-                recommendations=[],  # recommendations already shown separately above
+                recommendations=recommendations,
             )
             click.echo("\n" + success_msg)
         else:

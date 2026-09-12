@@ -356,7 +356,9 @@ def _format_value_for_display(value: Any, multiline_indicator: str | None) -> An
         Formatted value
     """
     if multiline_indicator:
-        return f"<multiline value: {multiline_indicator}>"
+        # Markdown table cells cannot preserve YAML block formatting. Keep the
+        # source value readable rather than replacing it with a placeholder.
+        return " ".join(value.split()) if isinstance(value, str) else value
     elif isinstance(value, list):
         return []
     elif isinstance(value, dict):

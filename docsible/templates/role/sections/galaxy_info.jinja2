@@ -1,7 +1,7 @@
 {% if role.meta and role.meta.galaxy_info %}
 ### Author Information
 - **Author**: {{ role.meta.galaxy_info.author or 'Unknown' }}
-- **License**: {{ role.meta.galaxy_info.license or 'Not specified' }}
+- **License**: {{ role.meta.galaxy_info.license | normalize_license or 'Not specified' }}
 - **Platforms**:
 {% for platform in role.meta.galaxy_info.platforms %}
 - {{ platform.name }}: {{ platform.versions }}
