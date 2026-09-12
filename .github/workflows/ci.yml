@@ -2,22 +2,19 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main, "feature/**"]
   pull_request:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
     name: Test & Lint (${{ matrix.python-version }})
-    # If a PR is open from this repo's branch, skip the duplicate push run
-    if: github.event_name != 'push' || github.ref_name == 'main' || !github.event.pull_request
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: true
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
 
