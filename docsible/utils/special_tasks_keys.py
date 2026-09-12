@@ -209,6 +209,11 @@ def process_special_task_keys(
         "type": task_type,
         "when": task_when,
     }
+    loop_key = "loop" if "loop" in task else next(
+        (key for key in task if key.startswith("with_")), None
+    )
+    if loop_key is not None:
+        processed_task["loop"] = loop_key
     if include_target is not None:
         processed_task["include_target"] = include_target
     tasks.append(processed_task)

@@ -63,6 +63,15 @@ class ComplexityMetrics(BaseModel):
     role_includes: int = Field(default=0, description="include_role/import_role count")
     task_includes: int = Field(default=0, description="include_tasks/import_tasks count")
 
+    # Execution graph metrics (source-backed relationships, not runtime claims)
+    static_reachable_task_files: int = Field(default=0)
+    dynamic_boundaries: int = Field(default=0)
+    unknown_boundaries: int = Field(default=0)
+    external_role_references: int = Field(default=0)
+    loop_tasks: int = Field(default=0)
+    notification_edges: int = Field(default=0)
+    orphan_task_files: int = Field(default=0)
+
     # External integrations
     external_integrations: int = Field(
         default=0, description="Count of external system connections"

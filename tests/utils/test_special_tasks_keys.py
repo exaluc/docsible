@@ -75,6 +75,13 @@ def test_include_role_target_captured():
     assert result[0]["include_target"] == "common"
 
 
+def test_loop_syntax_is_preserved_on_regular_tasks():
+    modern = process_special_task_keys({"debug": {"msg": "{{ item }}"}, "loop": ["a"]})
+    legacy = process_special_task_keys({"debug": {"msg": "{{ item }}"}, "with_items": ["a"]})
+    assert modern[0]["loop"] == "loop"
+    assert legacy[0]["loop"] == "with_items"
+
+
 def test_block_task_shape_unchanged():
     result = process_special_task_keys(
         {"name": "Handle failure", "block": [{"debug": {"msg": "try"}}], "rescue": []}

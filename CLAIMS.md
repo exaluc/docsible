@@ -1,6 +1,6 @@
 # Docsible: Verified Project State
 
-Snapshot: 2026-08-27
+Snapshot: 2026-09-13
 
 ## Purpose
 
@@ -77,6 +77,53 @@ npx --yes jscpd docsible
 - The deprecated `docsible role` command is still present alongside the newer
   intent-based command groups.
 
+## Role Execution Graph
+
+Docsible now has an internal, renderer-independent `RoleExecutionGraph` built
+from the raw Ansible task facts already retained by `RoleInfoLoader`. Its small
+interface is `build_role_execution_graph(role_info)`.
+
+- Nodes represent roles, task files, tasks, handlers, variables, and external
+  role references.
+- Typed edges represent containment, task-file include/import, role
+  include/import, task-to-handler notification, and known-variable use.
+- Every relationship carries its source location and preserves the resolution
+  state: `static`, `dynamic`, `unknown`, or `unresolved_external`. Dynamic
+  Ansible expressions are recorded without inventing a target.
+- README execution phases are now a static traversal from `tasks/main.yml`;
+  conditional paths are annotated and unreachable files are identified rather
+  than being presented as filesystem-order phases.
+- Component architecture diagrams derive variable and handler edges from graph
+  facts, replacing the old first-file and last-file proxy edges.
+- The graph uses standard-library dataclasses for a small serializable core.
+  NetworkX is not a Docsible dependency; a future visualization adapter may
+  convert the graph for layout algorithms.
+
+### Verified External Cases
+
+- `geerlingguy/ansible-role-docker` @ `38be616950679548ae0ba8a81ffcceca1b3090bd`:
+  JSON parses, documentation generation succeeds, `main.yml` is Phase 1, and
+  the five conditional include boundaries plus actual handler notifications
+  render as source-backed relationships.
+- `geerlingguy/ansible-role-nginx` @ `5ff0b235006390a0d5666fd4cce7477410982cdf`:
+  JSON parses, documentation generation succeeds, `main.yml` is Phase 1, the
+  seven OS-specific branches retain their `when` conditions, and `vhosts.yml`
+  is reached through its static import.
+
+### Next Graph Milestones
+
+1. Publish a documented JSON graph contract after its node and edge fields are
+   exercised by more external candidates.
+2. Resolve locally available roles in sibling role directories and collections;
+   retain absent Galaxy/FQCN roles as explicit external-reference nodes.
+3. Add graph projections for dynamic task/role includes, loops, blocks,
+   rescue/always, and source-linked variable scopes without claiming static
+   certainty where Ansible defers resolution.
+4. Make `graph_visualisation` a renderer adapter over this contract, using
+   NetworkX only for renderer-specific layout work.
+5. Extend the pinned external corpus before treating the graph contract as
+   release-stable.
+
 ## Remaining Duplication Work
 
 The source-only duplication scan is below the original baseline, but remaining
@@ -94,6 +141,7 @@ duplication is prioritized by ownership and behavior rather than percentage.
 
 ## Scope of This Document
 
-This file records observable project state and commands verified for this
-snapshot. It does not assert historical phase completion, performance results,
-future roadmaps, or unverified feature maturity.
+This file records observable project state, commands verified for this
+snapshot, and explicitly approved next milestones for the Role Execution Graph.
+It does not assert historical phase completion, performance results, or
+unverified feature maturity.

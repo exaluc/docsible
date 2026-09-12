@@ -1,19 +1,22 @@
 {% for task_file in role.tasks %}
 #### File: tasks/{{ task_file.file }}
-{%- set ns = namespace(has_tags=false, has_comments=false) -%}
+{%- set ns = namespace(has_tags=false, has_comments=false, has_loops=false) -%}
 {%- for task in task_file.tasks -%}
   {%- if task_file.mermaid | selectattr('name', 'equalto', task.name) | map(attribute='tags') | list | first -%}
     {%- set ns.has_tags = true -%}
   {%- endif -%}
 {%- endfor -%}
+{%- if task_file.tasks | selectattr('loop', 'defined') | list -%}
+  {%- set ns.has_loops = true -%}
+{%- endif -%}
 {%- if task_file.comments | length > 0 -%}
   {%- set ns.has_comments = true -%}
 {%- endif %}
-| Task Name | Module | Has Conditions |{% if ns.has_tags %} Tags |{% endif %}{% if ns.has_comments %} Description |{% endif %}
-|-----------|--------|----------------|{% if ns.has_tags %}------|{% endif %}{% if ns.has_comments %}-------------|{% endif %}
+| Task Name | Module | Has Conditions |{% if ns.has_loops %} Loop |{% endif %}{% if ns.has_tags %} Tags |{% endif %}{% if ns.has_comments %} Description |{% endif %}
+|-----------|--------|----------------|{% if ns.has_loops %}------|{% endif %}{% if ns.has_tags %}------|{% endif %}{% if ns.has_comments %}-------------|{% endif %}
 {% for task in task_file.tasks -%}
 {%- set link = links.render_repo_link(role.repository, role.name, 'tasks/' ~ task_file.file, task_file.lines[task.name], role.repository_type, role.repository_branch, role.belongs_to_collection) -%}
-| {% if task_file.lines and task_file.lines[task.name] %}[{{ task.name | escape_table_cell }}]({{ link }}){% else %}{{ task.name | escape_table_cell }}{% endif %} | {{ task.module | escape_table_cell }} | {{ 'True' if task.when else 'False' }} |{% if ns.has_tags %} {{ task_file.mermaid | selectattr('name', 'equalto', task.name) | map(attribute='tags') | safe_join(',') }} |{% endif %}{% if ns.has_comments %} {{ task_file.comments | selectattr('task_name', 'equalto', task.name) | map(attribute='task_comments') | safe_join(' ') }} |{% endif %}
+| {% if task_file.lines and task_file.lines[task.name] %}[{{ task.name | escape_table_cell }}]({{ link }}){% else %}{{ task.name | escape_table_cell }}{% endif %} | {{ task.module | escape_table_cell }} | {{ 'True' if task.when else 'False' }} |{% if ns.has_loops %} {{ task.loop | default('') | escape_table_cell }} |{% endif %}{% if ns.has_tags %} {{ task_file.mermaid | selectattr('name', 'equalto', task.name) | map(attribute='tags') | safe_join(',') }} |{% endif %}{% if ns.has_comments %} {{ task_file.comments | selectattr('task_name', 'equalto', task.name) | map(attribute='task_comments') | safe_join(' ') }} |{% endif %}
 {% endfor %}
 
 {# Mermaid diagram section with pagination support #}

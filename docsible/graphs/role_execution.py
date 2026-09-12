@@ -219,7 +219,10 @@ def _add_tasks(graph: RoleExecutionGraph, role_name: str, task_file: dict[str, A
         line = line_ranges[index[0]][0] if index and index[0] < len(line_ranges) else None
         source = SourceLocation(f"tasks/{file_name}", line)
         task_id = f"task:{role_name}:{file_name}:{'.'.join(map(str, index))}"
-        graph.add_node(GraphNode(task_id, NodeKind.TASK, str(task.get("name", "Unnamed")), source, {"file": file_name, "module": _module_name(task)}))
+        metadata = {"file": file_name, "module": _module_name(task)}
+        if loop := _loop(task):
+            metadata["loop"] = loop
+        graph.add_node(GraphNode(task_id, NodeKind.TASK, str(task.get("name", "Unnamed")), source, metadata))
         graph.add_edge(GraphEdge(EdgeKind.CONTAINS, file_ids[file_name], task_id, ResolutionStatus.STATIC, source))
         _add_variable_edges(graph, task_id, task, variables, source)
         _add_notification_edges(graph, task_id, task, handlers, source)

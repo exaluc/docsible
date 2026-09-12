@@ -88,27 +88,21 @@ This role integrates with {{ complexity_report.integration_points|length }} exte
 {% endfor %}
 {% endif %}
 
-### Execution Phases
+### Execution Routes
 
-These phases are a static traversal from the role entry point. Conditional
-branches are annotated; dynamic includes remain unresolved.
+Static traversal from the role entry point. Conditional paths do not imply that
+all branches run in one execution; dynamic boundaries remain unresolved.
 
 {% for task_file_info in execution_phases or complexity_report.task_files_detail %}
-#### Phase {{ loop.index }}: {{ task_file_info.file }}
-**Tasks:** {{ task_file_info.task_count }}
-{% if task_file_info.kind is defined and task_file_info.kind == 'conditional' %}
-**Conditional path:** {{ task_file_info.conditions | join(' and ') }}
-{% elif task_file_info.kind is defined and task_file_info.kind == 'unreachable' %}
-**Static traversal:** not reached from the entry point
+{% if loop.first %}#### Entry point: {{ task_file_info.file }}
+{% elif task_file_info.kind is defined and task_file_info.kind == 'conditional' %}#### Conditional path: {{ task_file_info.file }}
+{% elif task_file_info.kind is defined and task_file_info.kind == 'unreachable' %}#### Unreached static file: {{ task_file_info.file }}
+{% else %}#### Static continuation: {{ task_file_info.file }}
 {% endif %}
-
-> **Note:** Document decision points, error handling, and key operations for this phase
->
-> Example structure:
-> - **Purpose:** What this phase accomplishes
-> - **Prerequisites:** What must be true before this phase
-> - **Decision Points:** Key conditional logic
-> - **Error Handling:** How failures are managed
+Tasks: {{ task_file_info.task_count }}
+{% if task_file_info.kind is defined and task_file_info.kind == 'conditional' %}
+Condition: `{{ task_file_info.conditions | join(' and ') }}`
+{% endif %}
 
 {% endfor %}
 

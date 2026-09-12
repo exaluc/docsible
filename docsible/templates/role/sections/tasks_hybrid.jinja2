@@ -1,12 +1,13 @@
 {% for task_info in role.tasks %}
 ### File: `tasks/{{ task_info.file }}`
 {% if task_info.tasks %}
-{% set ns = namespace(has_comments=false) %}
+{% set ns = namespace(has_comments=false, has_loops=false) %}
 {% if task_info.comments | length > 0 %}{% set ns.has_comments = true %}{% endif %}
-| Task Name | Module |{% if ns.has_comments %} Description |{% endif %}
-|-----------|--------|{% if ns.has_comments %}-------------|{% endif %}
+{% if task_info.tasks | selectattr('loop', 'defined') | list %}{% set ns.has_loops = true %}{% endif %}
+| Task Name | Module |{% if ns.has_loops %} Loop |{% endif %}{% if ns.has_comments %} Description |{% endif %}
+|-----------|--------|{% if ns.has_loops %}------|{% endif %}{% if ns.has_comments %}-------------|{% endif %}
 {%- for task in task_info.tasks %}
-| {{ task.name | escape_table_cell if task.name else '*unnamed*' }} | {{ task.module | escape_table_cell }} |{% if ns.has_comments %} {{ task_info.comments | selectattr('task_name', 'equalto', task.name) | map(attribute='task_comments') | safe_join(' ') }} |{% endif %}
+| {{ task.name | escape_table_cell if task.name else '*unnamed*' }} | {{ task.module | escape_table_cell }} |{% if ns.has_loops %} {{ task.loop | default('') | escape_table_cell }} |{% endif %}{% if ns.has_comments %} {{ task_info.comments | selectattr('task_name', 'equalto', task.name) | map(attribute='task_comments') | safe_join(' ') }} |{% endif %}
 {%- endfor %}
 {% endif %}
 

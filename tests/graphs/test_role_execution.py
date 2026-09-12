@@ -1,5 +1,7 @@
 """Tests for the source-backed role execution graph."""
 
+import json
+
 from docsible.graphs import EdgeKind, ResolutionStatus, build_role_execution_graph
 
 
@@ -46,3 +48,34 @@ def test_builds_static_dynamic_and_notify_relationships():
     phases = graph.execution_phases()
     assert [phase["file"] for phase in phases] == ["main.yml", "setup.yml"]
     assert phases[1]["kind"] == "static"
+
+
+def test_preserves_external_role_boundaries_in_renderer_contract():
+    graph = build_role_execution_graph(
+        {
+            "name": "web",
+            "defaults": [],
+            "vars": [],
+            "handlers": [],
+            "tasks": [
+                {
+                    "file": "main.yml",
+                    "tasks": [{}, {}],
+                    "line_ranges": [(1, 2), (3, 4)],
+                    "mermaid": [
+                        {"import_role": {"name": "vendor.common", "tasks_from": "setup"}},
+                        {"include_role": "{{ selected_role }}"},
+                    ],
+                }
+            ],
+        }
+    )
+
+    role_edges = [
+        edge for edge in graph.edges if edge.kind in {EdgeKind.IMPORTS_ROLE, EdgeKind.INCLUDES_ROLE}
+    ]
+    assert role_edges[0].resolution is ResolutionStatus.UNRESOLVED_EXTERNAL
+    assert role_edges[0].target_id == "external_role:vendor.common"
+    assert role_edges[1].resolution is ResolutionStatus.DYNAMIC
+    assert role_edges[1].target_id is None
+    json.dumps(graph.to_dict())

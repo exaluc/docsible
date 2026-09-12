@@ -203,6 +203,31 @@ def analyze_role_complexity(
     inflection_points = detect_inflection_points(role_info, hotspots)
 
     # Create metrics
+    from docsible.graphs import EdgeKind, NodeKind, ResolutionStatus, build_role_execution_graph
+
+    execution_graph = build_role_execution_graph(role_info)
+    phases = execution_graph.execution_phases()
+    graph_metrics = {
+        "static_reachable_task_files": sum(phase["kind"] != "unreachable" for phase in phases),
+        "dynamic_boundaries": sum(
+            edge.resolution is ResolutionStatus.DYNAMIC for edge in execution_graph.edges
+        ),
+        "unknown_boundaries": sum(
+            edge.resolution is ResolutionStatus.UNKNOWN for edge in execution_graph.edges
+        ),
+        "external_role_references": sum(
+            node.kind is NodeKind.EXTERNAL_ROLE for node in execution_graph.nodes.values()
+        ),
+        "loop_tasks": sum(
+            node.kind is NodeKind.TASK and "loop" in node.metadata
+            for node in execution_graph.nodes.values()
+        ),
+        "notification_edges": sum(
+            edge.kind is EdgeKind.NOTIFIES_HANDLER and edge.target_id is not None
+            for edge in execution_graph.edges
+        ),
+        "orphan_task_files": sum(phase["kind"] == "unreachable" for phase in phases),
+    }
     metrics = ComplexityMetrics(
         total_tasks=total_tasks,
         task_files=task_files,
@@ -215,6 +240,7 @@ def analyze_role_complexity(
         external_integrations=len(integration_points),
         max_tasks_per_file=max_tasks_per_file,
         avg_tasks_per_file=avg_tasks_per_file,
+        **graph_metrics,
     )
 
     # Classify complexity
