@@ -138,12 +138,12 @@ def process_special_task_keys(
     for block_type in ("block", "rescue", "always"):
         if block_type in task:
             task_name = task.get("name", f"Unnamed_{block_type}")
-            task_module = block_type
+            block_module: str = block_type
             task_when = escape_pipes(task.get("when", None))
             tasks.append(
                 {
                     "name": escape_pipes(task_name),
-                    "module": task_module,
+                    "module": block_module,
                     "type": block_type,
                     "when": task_when,
                 }
@@ -158,7 +158,7 @@ def process_special_task_keys(
     task_when = escape_pipes(task.get("when", None))
 
     # Determine module name based on known task indicators or default to 'unknown'
-    task_module = "unknown"  # Default module if not found
+    task_module: str = "unknown"  # Default module if not found
     if "action" in task:
         action = task["action"]
         if isinstance(action, dict):

@@ -6,6 +6,7 @@ Users should migrate to ``docsible document role`` instead.
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -145,7 +146,7 @@ def doc_the_role(
     )
 
     # Collect all explicit kwargs and apply preset resolution
-    cli_kwargs = {
+    cli_kwargs: dict[str, Any] = {
         "role_path": role_path,
         "collection_path": collection_path,
         "playbook": playbook,
