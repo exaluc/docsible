@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def generate_component_architecture(
-    role_info: dict[str, Any] | None, complexity_report: Any
+    role_info: dict[str, Any] | None, complexity_report: Any, execution_graph: Any | None = None
 ) -> str | None:
     """
     Generate component architecture diagram for complex roles.
@@ -104,8 +104,22 @@ def generate_component_architecture(
     # Data flow connections
     lines.append("    %% Data Flow")
 
-    # Variables flow to tasks
-    if has_variables and task_files:
+    # Variables flow only to files with source-backed variable references.
+    if execution_graph is not None:
+        variable_edges: set[tuple[str, str]] = set()
+        for edge in execution_graph.edges:
+            if edge.kind.value != "uses_variable" or edge.target_id is None:
+                continue
+            task = execution_graph.nodes.get(edge.source_id)
+            variable = execution_graph.nodes.get(edge.target_id)
+            if not task or not variable:
+                continue
+            variable_node = "defaults" if variable.metadata.get("scope") == "defaults" else "vars"
+            task_id = f"tasks_{task.metadata['file'].replace('.', '_').replace('/', '_')}"
+            variable_edges.add((variable_node, task_id))
+        for variable_node, task_id in sorted(variable_edges):
+            lines.append(f"    {variable_node} --> {task_id}")
+    elif has_variables and task_files:
         first_task_id = (
             f"tasks_{task_files[0].get('file', 'file0').replace('.', '_').replace('/', '_')}"
         )
@@ -146,8 +160,18 @@ def generate_component_architecture(
                 lines.append(f'    {source_id} -."includes".-> {target_id}')
                 added_include_edges.add((source_id, target_id))
 
-    # Tasks to handlers (notification)
-    if task_files and handlers_count > 0:
+    # Tasks to handlers use source-backed notify relationships when available.
+    if execution_graph is not None:
+        notifying_files: set[str] = set()
+        for edge in execution_graph.edges:
+            if edge.kind.value == "notifies_handler" and edge.target_id:
+                task = execution_graph.nodes.get(edge.source_id)
+                if task:
+                    notifying_files.add(task.metadata["file"])
+        for file_name in sorted(notifying_files):
+            task_id = f"tasks_{file_name.replace('.', '_').replace('/', '_')}"
+            lines.append(f'    {task_id} -."notify".-> handlers')
+    elif task_files and handlers_count > 0:
         last_task_id = (
             f"tasks_{task_files[-1].get('file', 'fileN').replace('.', '_').replace('/', '_')}"
         )

@@ -251,7 +251,10 @@ def generate_mermaid_diagrams(
 
 
 def generate_integration_and_architecture_diagrams(
-    generate_graph: bool, role_info: dict[str, Any], analysis_report: Any
+    generate_graph: bool,
+    role_info: dict[str, Any],
+    analysis_report: Any,
+    execution_graph: Any | None = None,
 ) -> tuple[str | None, str | None]:
     """Generate integration boundary and component architecture diagrams.
 
@@ -297,6 +300,7 @@ def generate_integration_and_architecture_diagrams(
             architecture_diagram = generate_component_architecture(
                 role_info=role_info,
                 complexity_report=analysis_report,
+                execution_graph=execution_graph,
             )
             logger.info(
                 f"Generated component architecture diagram for {analysis_report.category.value.upper()} role"

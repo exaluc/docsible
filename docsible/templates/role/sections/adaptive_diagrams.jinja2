@@ -89,13 +89,18 @@ This role integrates with {{ complexity_report.integration_points|length }} exte
 {% endif %}
 
 ### Execution Phases
-<!-- MANUALLY MAINTAINED - Update as role evolves -->
 
-Due to complexity, this role is best understood through its execution phases:
+These phases are a static traversal from the role entry point. Conditional
+branches are annotated; dynamic includes remain unresolved.
 
-{% for task_file_info in complexity_report.task_files_detail %}
+{% for task_file_info in execution_phases or complexity_report.task_files_detail %}
 #### Phase {{ loop.index }}: {{ task_file_info.file }}
 **Tasks:** {{ task_file_info.task_count }}
+{% if task_file_info.kind is defined and task_file_info.kind == 'conditional' %}
+**Conditional path:** {{ task_file_info.conditions | join(' and ') }}
+{% elif task_file_info.kind is defined and task_file_info.kind == 'unreachable' %}
+**Static traversal:** not reached from the entry point
+{% endif %}
 
 > **Note:** Document decision points, error handling, and key operations for this phase
 >

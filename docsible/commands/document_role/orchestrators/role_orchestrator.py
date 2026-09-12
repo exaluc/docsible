@@ -272,6 +272,9 @@ class RoleOrchestrator:
             generate_integration_and_architecture_diagrams,
             generate_mermaid_diagrams,
         )
+        from docsible.graphs import build_role_execution_graph
+
+        execution_graph = build_role_execution_graph(role_info)
 
         # Generate task diagrams
         diagrams = generate_mermaid_diagrams(
@@ -285,12 +288,15 @@ class RoleOrchestrator:
 
         # Add generate_graph flag for formatter
         diagrams["generate_graph"] = self.context.diagrams.generate_graph
+        diagrams["execution_graph"] = execution_graph
+        diagrams["execution_phases"] = execution_graph.execution_phases()
 
         # Generate integration and architecture diagrams
         integration_boundary, architecture = generate_integration_and_architecture_diagrams(
             generate_graph=self.context.diagrams.generate_graph,
             role_info=role_info,
             analysis_report=analysis_report,
+            execution_graph=execution_graph,
         )
 
         diagrams["integration_boundary_diagram"] = integration_boundary
@@ -329,7 +335,6 @@ class RoleOrchestrator:
         analysis_report,
         diagrams: dict,
         dependency_data: dict,
-        recommendations: list[Recommendation],
     ) -> None:
         """Display dry-run summary.
 
@@ -339,7 +344,6 @@ class RoleOrchestrator:
             analysis_report: Complexity analysis report
             diagrams: Generated diagrams dictionary
             dependency_data: Dependency matrix data
-            recommendations: Findings to reflect in the success summary
         """
         flags = {
             "generate_graph": self.context.diagrams.generate_graph,
@@ -453,6 +457,7 @@ class RoleOrchestrator:
             "state_diagram": diagrams.get("state_diagram"),
             "integration_boundary_diagram": diagrams.get("integration_boundary_diagram"),
             "architecture_diagram": diagrams.get("architecture_diagram"),
+            "execution_phases": diagrams.get("execution_phases"),
             "complexity_report": analysis_report,
             "include_complexity": include_complexity,
             "dependency_matrix": dependency_data["dependency_matrix"],
@@ -474,6 +479,7 @@ class RoleOrchestrator:
         analysis_report,
         diagrams: dict,
         dependency_data: dict,
+        recommendations: list[Recommendation] | None = None,
     ) -> None:
         """Render final documentation.
 
@@ -483,6 +489,7 @@ class RoleOrchestrator:
             analysis_report: Complexity analysis report
             diagrams: Generated diagrams dictionary
             dependency_data: Dependency matrix data
+            recommendations: Findings to reflect in the success summary
         """
         from docsible.renderers.readme_renderer import ReadmeRenderer
         from docsible.renderers.tag_manager import manage_docsible_file_keys
@@ -522,7 +529,7 @@ class RoleOrchestrator:
             success_msg = formatter.format_success(
                 output_file=readme_path,
                 complexity=analysis_report,
-                recommendations=recommendations,
+                recommendations=recommendations or [],
             )
             click.echo("\n" + success_msg)
         else:
