@@ -60,6 +60,12 @@ def test_analyze_conditional_percentage():
                     {"name": "Task 3", "module": "debug"},  # No condition
                     {"name": "Task 4", "module": "debug"},  # No condition
                 ],
+                "mermaid": [
+                    {"name": "Task 1", "debug": {}, "when": "condition1"},
+                    {"name": "Task 2", "debug": {}, "when": "condition2"},
+                    {"name": "Task 3", "debug": {}},
+                    {"name": "Task 4", "debug": {}},
+                ],
             }
         ],
         "handlers": [],
@@ -127,3 +133,31 @@ def test_task_includes_is_graph_authoritative_and_counts_legacy_include():
     metrics = analyze_role_complexity(role_info).metrics
     assert metrics.task_includes == 1  # bare include: counted via the graph
     assert metrics.role_includes == 0
+
+
+def test_error_handlers_is_graph_derived_from_rescue_blocks():
+    """Regression: error_handlers used to scan flattened tasks for a
+    `rescue`/`always` key they never carry (always 0). Now derived from the
+    execution graph's block/rescue detection."""
+    role_info = {
+        "name": "guarded",
+        "defaults": [],
+        "vars": [],
+        "handlers": [],
+        "meta": {"dependencies": []},
+        "tasks": [
+            {
+                "file": "main.yml",
+                "tasks": [{"name": "Guarded", "module": "block"}],
+                "mermaid": [
+                    {
+                        "name": "Guarded",
+                        "block": [{"name": "Try", "debug": {}}],
+                        "rescue": [{"name": "Fallback", "debug": {}}],
+                    }
+                ],
+            }
+        ],
+    }
+    metrics = analyze_role_complexity(role_info).metrics
+    assert metrics.error_handlers == 1

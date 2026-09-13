@@ -145,3 +145,60 @@ def test_uses_variable_edge_survives_tokenizer_rewrite():
     )
     var_edges = [e for e in graph.edges if e.kind is EdgeKind.USES_VARIABLE]
     assert [e.target_id for e in var_edges] == ["variable:web:defaults:web_port"]
+
+
+def test_rescue_block_recorded_as_error_handling():
+    graph = build_role_execution_graph(
+        {
+            "name": "r",
+            "defaults": [],
+            "vars": [],
+            "handlers": [],
+            "tasks": [
+                {
+                    "file": "main.yml",
+                    "tasks": [{}],
+                    "mermaid": [
+                        {
+                            "name": "Guarded",
+                            "block": [{"debug": {}}],
+                            "rescue": [{"debug": {}}],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    nodes = [
+        n for n in graph.nodes.values() if n.kind is NodeKind.TASK and "error_handling" in n.metadata
+    ]
+    assert nodes and nodes[0].metadata["error_handling"] == "rescue"
+
+
+def test_execution_phases_partition_covers_every_file():
+    role_info = {
+        "name": "r",
+        "defaults": [],
+        "vars": [],
+        "handlers": [],
+        "tasks": [
+            {
+                "file": "main.yml",
+                "tasks": [{}, {}],
+                "mermaid": [
+                    {"name": "static", "import_tasks": "sub.yml"},
+                    {"name": "dyn", "import_tasks": "{{ variant }}stig/main.yml"},
+                ],
+            },
+            {"file": "sub.yml", "tasks": [{}], "mermaid": [{"debug": {}}]},
+            {"file": "stig/main.yml", "tasks": [{}], "mermaid": [{"debug": {}}]},
+            {"file": "never_referenced.yml", "tasks": [{}], "mermaid": [{"debug": {}}]},
+        ],
+    }
+    phases = build_role_execution_graph(role_info).execution_phases()
+    kinds = [p["kind"] for p in phases]
+    # every file is classified, and the three tiers partition exactly the files
+    assert len(phases) == 4
+    assert kinds.count("unreachable") == 1  # never_referenced.yml
+    assert kinds.count("dynamic") == 1  # stig/main.yml reached via templated include
+    assert "entrypoint" in kinds and "static" in kinds

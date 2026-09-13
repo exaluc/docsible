@@ -119,8 +119,9 @@ class DryRunFormatter:
         lines.append(
             "   Execution graph: "
             f"{metrics.static_reachable_task_files} static files, "
+            f"{metrics.dynamically_reachable_task_files} dynamic-only, "
             f"{metrics.dynamic_boundaries} dynamic boundaries, "
-            f"{metrics.orphan_task_files} orphans"
+            f"{metrics.unreachable_task_files} unreachable"
         )
 
         return "\n".join(lines)

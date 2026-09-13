@@ -498,6 +498,12 @@ def test_analyze_conditional_percentage():
                     {"name": "Task 3", "module": "debug"},  # No condition
                     {"name": "Task 4", "module": "debug"},  # No condition
                 ],
+                "mermaid": [
+                    {"name": "Task 1", "debug": {}, "when": "condition1"},
+                    {"name": "Task 2", "debug": {}, "when": "condition2"},
+                    {"name": "Task 3", "debug": {}},
+                    {"name": "Task 4", "debug": {}},
+                ],
             }
         ],
         "handlers": [],

@@ -65,13 +65,20 @@ class ComplexityMetrics(BaseModel):
     task_includes: int = Field(default=0, description="include_tasks/import_tasks count")
 
     # Execution graph metrics (source-backed relationships, not runtime claims)
-    static_reachable_task_files: int = Field(default=0)
+    static_reachable_task_files: int = Field(
+        default=0, description="Files reachable via static/conditional boundaries only"
+    )
+    dynamically_reachable_task_files: int = Field(
+        default=0, description="Files reachable only through an unresolved dynamic boundary"
+    )
     dynamic_boundaries: int = Field(default=0)
     unknown_boundaries: int = Field(default=0)
     external_role_references: int = Field(default=0)
     loop_tasks: int = Field(default=0)
     notification_edges: int = Field(default=0)
-    orphan_task_files: int = Field(default=0)
+    unreachable_task_files: int = Field(
+        default=0, description="Files with no inbound boundary from any resolved edge"
+    )
     conditional_decision_points: int = Field(default=0)
 
     # External integrations

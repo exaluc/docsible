@@ -145,18 +145,10 @@ def analyze_role_complexity(
     # Count handlers
     handlers = len(role_info.get("handlers", []))
 
-    # Count conditional tasks
-    conditional_tasks = sum(
-        1 for tf in tasks_data for task in tf.get("tasks", []) if task.get("when")
-    )
-
-    # Count tasks with error handling (rescue or always blocks)
-    error_handlers = sum(
-        1
-        for tf in tasks_data
-        for task in tf.get("tasks", [])
-        if task.get("rescue") or task.get("always")
-    )
+    # conditional_tasks and error_handlers are derived from the
+    # RoleExecutionGraph below (single source of truth), instead of a second
+    # flattened-task scan. The old error_handlers scan read a `rescue`/`always`
+    # key that flattened tasks never carry, so it was always 0.
 
     # Count role dependencies (from meta/main.yml)
     role_dependencies = len(role_info.get("meta", {}).get("dependencies", []))
@@ -207,9 +199,15 @@ def analyze_role_complexity(
 
     # Create metrics (execution_graph already built above; reuse it).
     phases = execution_graph.execution_phases()
+    task_nodes = [node for node in execution_graph.nodes.values() if node.kind is NodeKind.TASK]
     graph_metrics = {
+        "conditional_tasks": sum("condition" in node.metadata for node in task_nodes),
+        "error_handlers": sum("error_handling" in node.metadata for node in task_nodes),
         "static_reachable_task_files": sum(
             phase["kind"] in {"entrypoint", "static", "conditional"} for phase in phases
+        ),
+        "dynamically_reachable_task_files": sum(
+            phase["kind"] == "dynamic" for phase in phases
         ),
         "dynamic_boundaries": sum(
             edge.resolution is ResolutionStatus.DYNAMIC
@@ -232,7 +230,7 @@ def analyze_role_complexity(
             edge.kind is EdgeKind.NOTIFIES_HANDLER and edge.target_id is not None
             for edge in execution_graph.edges
         ),
-        "orphan_task_files": sum(phase["kind"] == "unreachable" for phase in phases),
+        "unreachable_task_files": sum(phase["kind"] == "unreachable" for phase in phases),
         "conditional_decision_points": sum(
             node.kind is NodeKind.TASK and "condition" in node.metadata
             for node in execution_graph.nodes.values()
@@ -242,8 +240,6 @@ def analyze_role_complexity(
         total_tasks=total_tasks,
         task_files=task_files,
         handlers=handlers,
-        conditional_tasks=conditional_tasks,
-        error_handlers=error_handlers,
         role_dependencies=role_dependencies,
         collection_dependencies=collection_dependencies,
         role_includes=role_includes,

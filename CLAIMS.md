@@ -261,28 +261,39 @@ the same fact is never computed twice by two implementations (the
 `task_includes`/legacy-`include:` drift was the first instance of this class).
 
 - Derived from the graph (single source of truth): `task_includes`,
-  `role_includes`, `static_reachable_task_files`, `dynamic_boundaries`,
-  `unknown_boundaries`, `external_role_references`, `loop_tasks`,
-  `notification_edges`, `orphan_task_files`, `conditional_decision_points`.
+  `role_includes`, `conditional_tasks`, `error_handlers`,
+  `static_reachable_task_files`, `dynamically_reachable_task_files`,
+  `unreachable_task_files`, `dynamic_boundaries`, `unknown_boundaries`,
+  `external_role_references`, `loop_tasks`, `notification_edges`,
+  `conditional_decision_points`.
 - Still computed by separate scans of `role_info` (acceptable structural
-  counts): `total_tasks`, `task_files`, `handlers`, `max_tasks_per_file`,
-  `avg_tasks_per_file`; meta reads `role_dependencies`,
+  counts, not graph facts): `total_tasks`, `task_files`, `handlers`,
+  `max_tasks_per_file`, `avg_tasks_per_file`; meta reads `role_dependencies`,
   `collection_dependencies`; and the non-graph analyzers
   `external_integrations` (`detect_integrations`), `file_details`
   (`analyze_file_complexity`), and the hotspot/inflection detectors.
-- Two residual scans are flagged risks, not yet fixed:
-  - `conditional_tasks` and the graph-derived `conditional_decision_points`
-    measure the same concept through two implementations. They agree on every
-    tested role today (CIS: 592 = 592) but can silently drift, exactly like
-    `task_includes` did before it was made graph-derived. Recommendation:
-    keep the graph-derived value authoritative and drop or alias the scan.
-  - `error_handlers` is effectively dead: it counts `task.get("rescue") or
-    task.get("always")` over the *flattened processed* tasks, but the
-    flattener emits block/rescue/always as separate rows (with `module`),
-    never as a `rescue`/`always` key on a task — so it reports **0** even for
-    a role with ~189 blocks (verified on `UBUNTU22-CIS`). It is both
-    mis-implemented and a residual scan; the right owner is the graph, which
-    already walks real block/rescue/always — see Next Graph Milestones #3.
+- Resolved this milestone:
+  - `conditional_tasks` no longer has its own flattened-task scan — it is now
+    derived from the same graph pass as `conditional_decision_points`, so the
+    two cannot drift (previously the first duplicate-scan class instance after
+    `task_includes`).
+  - `error_handlers` was dead (it scanned flattened tasks for a `rescue`/
+    `always` key that is never there, so always 0). It is now graph-derived
+    from real block/rescue/always detection; a rescue block counts as 1
+    (unit-tested), and roles without rescue/always correctly stay 0.
+- Reachability is now a complete, honest partition. Previously a file reached
+  only through a dynamic boundary was counted as neither "static reachable"
+  nor "orphan" and silently vanished (openstack `ansible-hardening` showed
+  "static 2 / orphan 5" for a 20-file role). Now `static_reachable +
+  dynamically_reachable + unreachable == task_files` (openstack: 2 + 13 + 5
+  = 20), and the misleading "orphan" field is renamed `unreachable_task_files`
+  (no inbound edge from any *resolved* boundary), with the graph summary and
+  README explaining the three tiers.
+- Still open (structural depth, not metrics): the graph flags that a block has
+  rescue/always but does not yet model the block/rescue/always control flow as
+  first-class nodes/edges, and files reachable only through an *unresolved*
+  dynamic boundary (e.g. `{{ pkg_mgr }}.yml`) still read as `unreachable`
+  because the graph deliberately does not guess which concrete file runs.
 
 ### Next Graph Milestones
 
@@ -303,10 +314,11 @@ the same fact is never computed twice by two implementations (the
    per-role graphs via those role edges. This is the concrete building block
    for the collection milestone and is incremental on the existing model, not
    a new subsystem.
-3. Add graph projections for blocks, rescue/always, and source-linked
-   variable scopes without claiming static certainty where Ansible defers
-   resolution. Fixing block/rescue/always representation here also repairs
-   the dead `error_handlers` metric (see Complexity ownership above).
+3. Model block/rescue/always as first-class graph structure (nodes/edges), and
+   add source-linked variable scopes, without claiming static certainty where
+   Ansible defers resolution. (The `error_handlers` metric is already
+   graph-derived from real rescue/always detection; what remains is exposing
+   the block control flow itself, not just the count.)
 4. Make `graph_visualisation` a renderer adapter over this contract, using
    NetworkX only for renderer-specific layout work.
 5. Extend the pinned external corpus before treating the graph contract as
@@ -391,11 +403,13 @@ duplication is prioritized by ownership and behavior rather than percentage.
    and include/role boundary counts are graph-derived (milestone 14). Used
    identically by `document role`, `document role --collection`, and
    `scan collection`.
-2. Collapse the remaining duplicate complexity scans into the graph so a fact
-   is computed once: `conditional_tasks` (alias/derive from
-   `conditional_decision_points`) and `error_handlers` (via real
-   block/rescue/always projection, Next Graph Milestones #3). Until then they
-   are two implementations of one concept and can drift.
+ 2. **Resolved.** The duplicate complexity scans are collapsed into the graph:
+    `conditional_tasks` is now derived from the same graph pass as
+    `conditional_decision_points` (one source, cannot drift), and
+    `error_handlers` is graph-derived from real block/rescue/always detection
+    (was always 0). Reachability was also made a complete partition
+    (`static + dynamic-only + unreachable == task_files`) with the misleading
+    `orphan` renamed to `unreachable`.
 3. Role-information *loading* still has one remaining duplicate: the deprecated
    `RoleInfoBuilder` alongside `RoleInfoLoader` (see Known Limitations).
    Retire `RoleInfoBuilder` and the deprecated `docsible role` command, and

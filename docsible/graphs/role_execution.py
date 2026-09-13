@@ -247,6 +247,8 @@ def _add_tasks(graph: RoleExecutionGraph, role_name: str, task_file: dict[str, A
             metadata["loop"] = loop
             if loop_control := extract_loop_control(task):
                 metadata["loop_control"] = loop_control
+        if error_handling := _error_handling(task):
+            metadata["error_handling"] = error_handling
         graph.add_node(GraphNode(task_id, NodeKind.TASK, str(task.get("name", "Unnamed")), source, metadata))
         graph.add_edge(GraphEdge(EdgeKind.CONTAINS, file_ids[file_name], task_id, ResolutionStatus.STATIC, source))
         _add_variable_edges(graph, task_id, task, variables, source)
@@ -365,3 +367,16 @@ def _loop(task: dict[str, Any]) -> str | None:
     if "loop" in task:
         return "loop"
     return next((key for key in task if key.startswith("with_")), None)
+
+
+def _error_handling(task: dict[str, Any]) -> str | None:
+    """Return the block error-handling shape ('rescue'/'always'/both) if any."""
+    has_rescue = isinstance(task.get("rescue"), list)
+    has_always = isinstance(task.get("always"), list)
+    if has_rescue and has_always:
+        return "rescue + always"
+    if has_rescue:
+        return "rescue"
+    if has_always:
+        return "always"
+    return None
