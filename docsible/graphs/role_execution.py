@@ -168,6 +168,11 @@ class RoleExecutionGraph:
 _TASK_FILE_ACTIONS = {"include", "include_tasks", "import_tasks"}
 _ROLE_ACTIONS = {"include_role", "import_role"}
 _VARIABLE_PATTERN = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\b")
+# One-pass identifier tokenizer for variable-usage edges. Equivalent to the
+# previous per-variable `\b<name>\b` search (a variable "matches" iff it
+# appears as a whole identifier token in the serialized task), but scans each
+# task once instead of once per known variable.
+_IDENT_TOKEN_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _ROLE_PATH_TASK_PREFIX = re.compile(r"^\{\{\s*role_path\s*\}\}/tasks/")
 
 
@@ -270,9 +275,9 @@ def _module_name(task: dict[str, Any]) -> str:
 
 
 def _add_variable_edges(graph: RoleExecutionGraph, task_id: str, task: dict[str, Any], variables: dict[str, str], source: SourceLocation) -> None:
-    text = str(task)
+    referenced = set(_IDENT_TOKEN_PATTERN.findall(str(task)))
     for name, node_id in variables.items():
-        if re.search(rf"\b{re.escape(name)}\b", text):
+        if name in referenced:
             graph.add_edge(GraphEdge(EdgeKind.USES_VARIABLE, task_id, node_id, ResolutionStatus.STATIC, source))
 
 

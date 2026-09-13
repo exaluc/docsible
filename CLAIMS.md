@@ -260,6 +260,23 @@ interface is `build_role_execution_graph(role_info)`.
    adapter (item 4), where the "too large for Mermaid" content belongs; the
    README note, if ever needed, should be written once that adapter exists so
    it does not churn.
+7. (Finding, deferred — precision, not perf) `uses_variable` edges over-match
+   because `_add_variable_edges` marks a variable "used" when its name appears
+   as *any* identifier token in `str(task)` — the whole serialized task
+   (module name, arg values, `when`/`register`, task-name prose, handler
+   names). The (a) perf fix kept this behavior identical (single tokenizer pass
+   instead of per-variable regex) but did not narrow it, so the edges can be
+   spurious: at CIS scale 1285 of 2510 edges are `uses_variable`, a plausible
+   share not real Jinja references. This weakens the JSON graph contract, the
+   "which variables does this task read" change-impact answer, and any dense
+   interactive variable layer. Planned fix (a deliberate semantics change, NOT
+   to be slipped into an optimization): restrict to genuine references —
+   `{{ name }}`/`{{ name.attr }}` interpolations and templated arg/`when`
+   values (reuse `dependency_matrix.extract_variable_references`) — exclude
+   non-reference keys, and treat `loop_control.loop_var`/`index_var` names as
+   loop-local so they are not linked to same-named role variables. Because it
+   intentionally drops noisy edges (fewer, more-accurate), it needs its own
+   tests and review.
 
 ## Collection Support
 

@@ -235,6 +235,7 @@ def document_collection_roles(
                     append=append,
                     backup=not no_backup,
                     playbook_content=playbook_content,
+                    execution_graph=analysis.execution_graph,
                 )
 
                 warning_count = sum(

@@ -6,6 +6,7 @@ builders, formatters, and renderers.
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -74,8 +75,10 @@ class RoleOrchestrator:
             self._display_analysis_and_exit(analysis_report, role_info)
             return
 
-        # Step 6: Generate diagrams
-        diagrams = self._generate_diagrams(role_info, analysis_report, playbook_content)
+        # Step 6: Generate diagrams (reuse the shared execution graph)
+        diagrams = self._generate_diagrams(
+            role_info, analysis_report, playbook_content, analysis.execution_graph
+        )
 
         # Step 7: Generate dependency matrix
         dependency_data = self._generate_dependencies(role_info, analysis_report)
@@ -259,7 +262,11 @@ class RoleOrchestrator:
         handle_analyze_only_mode(role_info, role_info.get("name", "unknown"))
 
     def _generate_diagrams(
-        self, role_info: dict, analysis_report, playbook_content: str | None
+        self,
+        role_info: dict,
+        analysis_report,
+        playbook_content: str | None,
+        execution_graph: Any | None = None,
     ) -> dict:
         """Generate all Mermaid diagrams.
 
@@ -267,6 +274,7 @@ class RoleOrchestrator:
             role_info: Role information dictionary
             analysis_report: Complexity analysis report
             playbook_content: Optional playbook content
+            execution_graph: Prebuilt graph to reuse (built here only if absent)
 
         Returns:
             Dictionary of generated diagrams
@@ -275,9 +283,11 @@ class RoleOrchestrator:
             generate_integration_and_architecture_diagrams,
             generate_mermaid_diagrams,
         )
-        from docsible.graphs import build_role_execution_graph
 
-        execution_graph = build_role_execution_graph(role_info)
+        if execution_graph is None:
+            from docsible.graphs import build_role_execution_graph
+
+            execution_graph = build_role_execution_graph(role_info)
 
         # Generate task diagrams
         diagrams = generate_mermaid_diagrams(

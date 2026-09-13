@@ -119,3 +119,29 @@ def test_loop_control_recorded_in_task_metadata():
     assert loop_nodes, "loop_control must be recorded on the task node"
     assert loop_nodes[0].metadata["loop"] == "loop"
     assert loop_nodes[0].metadata["loop_control"] == {"loop_var": "entry", "index_var": "i"}
+
+
+def test_uses_variable_edge_survives_tokenizer_rewrite():
+    """The (a) optimization replaced a per-variable regex with a one-pass
+    identifier tokenizer; this guards that a genuinely referenced variable
+    still yields a uses_variable edge."""
+    graph = build_role_execution_graph(
+        {
+            "name": "web",
+            "defaults": [{"file": "main.yml", "data": {"web_port": {"line": 1}}}],
+            "vars": [],
+            "handlers": [],
+            "tasks": [
+                {
+                    "file": "main.yml",
+                    "tasks": [{}],
+                    "line_ranges": [(1, 3)],
+                    "mermaid": [
+                        {"name": "Bind", "ansible.builtin.template": {"port": "{{ web_port }}"}}
+                    ],
+                }
+            ],
+        }
+    )
+    var_edges = [e for e in graph.edges if e.kind is EdgeKind.USES_VARIABLE]
+    assert [e.target_id for e in var_edges] == ["variable:web:defaults:web_port"]

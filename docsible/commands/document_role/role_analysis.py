@@ -26,6 +26,7 @@ from typing import Any
 from docsible.analyzers import analyze_role_complexity
 from docsible.analyzers.complexity_analyzer.models import ComplexityReport
 from docsible.analyzers.recommendations import generate_all_recommendations
+from docsible.graphs import build_role_execution_graph
 from docsible.models.recommendation import Recommendation
 
 
@@ -35,6 +36,7 @@ class RoleAnalysis:
 
     complexity_report: ComplexityReport
     recommendations: list[Recommendation]
+    execution_graph: Any = None
 
 
 def analyze_role(
@@ -57,15 +59,23 @@ def analyze_role(
             smart defaults) instead of analyzing again
 
     Returns:
-        RoleAnalysis with the complexity report and recommendations
+        RoleAnalysis with the complexity report, recommendations, and the
+        one shared execution graph (reused by the complexity metrics and by
+        any downstream render, so it is never rebuilt per command).
     """
+    execution_graph = build_role_execution_graph(role_info)
     complexity_report = cached_complexity_report or analyze_role_complexity(
         role_info,
         include_patterns=include_patterns,
         min_confidence=min_confidence,
+        execution_graph=execution_graph,
     )
     recommendations = generate_all_recommendations(role_path, complexity_report)
-    return RoleAnalysis(complexity_report=complexity_report, recommendations=recommendations)
+    return RoleAnalysis(
+        complexity_report=complexity_report,
+        recommendations=recommendations,
+        execution_graph=execution_graph,
+    )
 
 
 def render_analyzed_role(
@@ -93,6 +103,7 @@ def render_analyzed_role(
     auto_fix: bool = False,
     strict_validation: bool = False,
     playbook_content: str | None = None,
+    execution_graph: Any | None = None,
 ) -> Path:
     """Generate diagrams/dependency matrix and render a role README.
 
@@ -113,7 +124,8 @@ def render_analyzed_role(
     from docsible.renderers.readme_renderer import ReadmeRenderer
 
     analysis_report = analysis.complexity_report
-    execution_graph = build_role_execution_graph(role_info)
+    if execution_graph is None:
+        execution_graph = build_role_execution_graph(role_info)
 
     diagrams = generate_mermaid_diagrams(
         generate_graph=generate_graph,

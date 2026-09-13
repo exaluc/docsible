@@ -106,6 +106,7 @@ def analyze_role_complexity(
     role_info: dict[str, Any],
     include_patterns: bool = False,
     min_confidence: float = 0.7,
+    execution_graph: Any | None = None,
 ) -> ComplexityReport:
     """Analyze role complexity and generate comprehensive report.
 
@@ -113,6 +114,9 @@ def analyze_role_complexity(
         role_info: Role information dictionary from build_role_info()
         include_patterns: Whether to include pattern analysis (requires --simplification-report flag)
         min_confidence: Minimum confidence threshold for pattern detection (0.0-1.0)
+        execution_graph: Prebuilt RoleExecutionGraph to reuse instead of
+            rebuilding one (build is cheap now, but callers that already hold
+            one — e.g. analyze_role — pass it to avoid duplicate work)
 
     Returns:
         ComplexityReport with metrics, category, recommendations, and optional pattern analysis
@@ -206,7 +210,8 @@ def analyze_role_complexity(
     # Create metrics
     from docsible.graphs import EdgeKind, NodeKind, ResolutionStatus, build_role_execution_graph
 
-    execution_graph = build_role_execution_graph(role_info)
+    if execution_graph is None:
+        execution_graph = build_role_execution_graph(role_info)
     phases = execution_graph.execution_phases()
     graph_metrics = {
         "static_reachable_task_files": sum(
