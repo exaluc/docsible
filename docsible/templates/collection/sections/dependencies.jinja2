@@ -5,7 +5,7 @@
 
 This collection depends on the following collections:
 
-{% for dep_key, dep_value in collection.dependencies.items() %}
+{% for dep_key, dep_value in collection.dependencies.items() -%}
 - `{{ dep_key }}`: {{ dep_value }}
 {% endfor %}
-{% endif %}
+{%- endif %}

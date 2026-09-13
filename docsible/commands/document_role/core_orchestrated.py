@@ -432,6 +432,7 @@ def doc_the_role(**kwargs: Any) -> None:
                 repository_url=context.repository.repository_url or "",
                 repo_type=context.repository.repo_type or "",
                 repo_branch=context.repository.repo_branch or "",
+                dry_run=context.processing.dry_run,
             )
         except CollectionNotFoundError as e:
             raise click.ClickException(str(e)) from e

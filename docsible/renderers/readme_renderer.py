@@ -269,8 +269,11 @@ class ReadmeRenderer:
         # Step 4: Add Docsible tags
         new_content = self.tag_processor.add_tags(new_content)
 
-        # Step 5: Merge with existing content
+        # Step 5: Normalize excessive blank lines (same as role READMEs)
+        new_content = self.markdown_processor.process(new_content)
+
+        # Step 6: Merge with existing content
         final_content = self.content_merger.merge(output_path, new_content, append)
 
-        # Step 6: Write file
+        # Step 7: Write file
         self.file_writer.write(output_path, final_content)

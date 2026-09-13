@@ -4,6 +4,7 @@ import logging
 import os
 from pathlib import Path
 
+import click
 import yaml
 
 from docsible.commands.role_info_loader import RoleInfoLoader
@@ -39,6 +40,7 @@ def document_collection_roles(
     repository_url: str,
     repo_type: str,
     repo_branch: str,
+    dry_run: bool = False,
 ) -> None:
     """Document all roles in an Ansible collection.
 
@@ -69,6 +71,7 @@ def document_collection_roles(
         repository_url: Repository URL
         repo_type: Repository type (github, gitlab, gitea)
         repo_branch: Repository branch name
+        dry_run: Print the collection documentation plan without writing files
     """
 
     collection_path_obj = Path(collection_path)
@@ -98,6 +101,16 @@ def document_collection_roles(
 
     if not collection_markers:
         logger.warning(f"No collection marker files (galaxy.yml/yaml) found in {collection_path}")
+        return
+
+    if dry_run:
+        role_count = sum(
+            1
+            for marker in collection_markers
+            for role_path in ProjectStructure(str(marker.parent)).get_roles_dir().iterdir()
+            if role_path.is_dir()
+        )
+        click.echo(f"Dry-run: would document {role_count} role(s) in {collection_path}")
         return
 
     # Process each collection found
