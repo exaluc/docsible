@@ -278,7 +278,7 @@ def _generate_grouped_architecture(role_info: dict[str, Any], execution_graph: A
             if source_file and target_file:
                 key = (file_group[source_file], file_group[target_file])
                 grouped_edges[key] = grouped_edges.get(key, 0) + 1
-            elif source_file and edge.resolution.value in {"dynamic", "unknown"}:
+            if source_file and edge.resolution.value in {"dynamic", "unknown"}:
                 uncertain_sources.add(file_group[source_file])
         elif edge.kind.value == "notifies_handler" and edge.target_id:
             source_file_id = task_to_file.get(edge.source_id)

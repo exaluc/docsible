@@ -208,12 +208,18 @@ def analyze_role_complexity(
     execution_graph = build_role_execution_graph(role_info)
     phases = execution_graph.execution_phases()
     graph_metrics = {
-        "static_reachable_task_files": sum(phase["kind"] != "unreachable" for phase in phases),
+        "static_reachable_task_files": sum(
+            phase["kind"] in {"entrypoint", "static", "conditional"} for phase in phases
+        ),
         "dynamic_boundaries": sum(
-            edge.resolution is ResolutionStatus.DYNAMIC for edge in execution_graph.edges
+            edge.resolution is ResolutionStatus.DYNAMIC
+            and edge.kind in {EdgeKind.INCLUDES_TASK_FILE, EdgeKind.IMPORTS_TASK_FILE, EdgeKind.INCLUDES_ROLE, EdgeKind.IMPORTS_ROLE}
+            for edge in execution_graph.edges
         ),
         "unknown_boundaries": sum(
-            edge.resolution is ResolutionStatus.UNKNOWN for edge in execution_graph.edges
+            edge.resolution is ResolutionStatus.UNKNOWN
+            and edge.kind in {EdgeKind.INCLUDES_TASK_FILE, EdgeKind.IMPORTS_TASK_FILE, EdgeKind.INCLUDES_ROLE, EdgeKind.IMPORTS_ROLE}
+            for edge in execution_graph.edges
         ),
         "external_role_references": sum(
             node.kind is NodeKind.EXTERNAL_ROLE for node in execution_graph.nodes.values()

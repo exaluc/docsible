@@ -6,6 +6,7 @@ import re
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+from fnmatch import fnmatch
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -98,7 +99,7 @@ class RoleExecutionGraph:
         for edge in self.edges:
             if (
                 edge.kind in {EdgeKind.INCLUDES_TASK_FILE, EdgeKind.IMPORTS_TASK_FILE}
-                and edge.resolution is ResolutionStatus.STATIC
+                and edge.resolution in {ResolutionStatus.STATIC, ResolutionStatus.DYNAMIC}
                 and edge.target_id in file_ids
             ):
                 source_file_id = task_files_by_task.get(edge.source_id)
@@ -122,12 +123,23 @@ class RoleExecutionGraph:
                     "task_count": node.metadata["task_count"],
                     "kind": phase_kind,
                     "conditions": sorted({edge.condition for edge in incoming if edge.condition}),
+                    "expressions": sorted(
+                        {edge.target_expression for edge in incoming if edge.target_expression}
+                    ),
                 }
             )
             for edge in outgoing.get(node_id, []):
                 if edge.target_id is not None:
                     queue.append(
-                        (edge.target_id, "conditional" if edge.condition else "static", [edge])
+                        (
+                            edge.target_id,
+                            "dynamic"
+                            if phase_kind == "dynamic" or edge.resolution is ResolutionStatus.DYNAMIC
+                            else "conditional"
+                            if edge.condition
+                            else "static",
+                            [edge],
+                        )
                     )
 
         for node in sorted(files, key=lambda item: item.metadata["file"]):
@@ -138,6 +150,7 @@ class RoleExecutionGraph:
                         "task_count": node.metadata["task_count"],
                         "kind": "unreachable",
                         "conditions": [],
+                        "expressions": [],
                     }
                 )
         return phases
@@ -282,8 +295,28 @@ def _add_composition_edge(graph: RoleExecutionGraph, task_id: str, task: dict[st
             graph.add_node(GraphNode(target_id, NodeKind.EXTERNAL_ROLE, target, metadata={"role": target}))
         resolution = ResolutionStatus.DYNAMIC if dynamic else ResolutionStatus.UNRESOLVED_EXTERNAL
     else:
-        target_id = _resolve_task_file(resolved_target, source_file, file_ids) if not dynamic else None
-        resolution = ResolutionStatus.DYNAMIC if dynamic else ResolutionStatus.STATIC if target_id else ResolutionStatus.UNKNOWN
+        if dynamic:
+            candidate_ids = _resolve_dynamic_task_files(resolved_target, source_file, file_ids)
+            if candidate_ids:
+                for target_id in candidate_ids:
+                    graph.add_edge(
+                        GraphEdge(
+                            kind,
+                            task_id,
+                            target_id,
+                            ResolutionStatus.DYNAMIC,
+                            source,
+                            condition=_condition(task),
+                            loop=_loop(task),
+                            target_expression=target,
+                        )
+                    )
+                return
+            target_id = None
+            resolution = ResolutionStatus.DYNAMIC
+        else:
+            target_id = _resolve_task_file(resolved_target, source_file, file_ids)
+            resolution = ResolutionStatus.STATIC if target_id else ResolutionStatus.UNKNOWN
     graph.add_edge(GraphEdge(kind, task_id, target_id, resolution, source, condition=_condition(task), loop=_loop(task), target_expression=target or None))
 
 
@@ -294,6 +327,22 @@ def _resolve_task_file(target: str, source_file: str, file_ids: dict[str, str]) 
             return file_ids[candidate]
     matches = [node_id for file_name, node_id in file_ids.items() if PurePosixPath(file_name).name == PurePosixPath(target).name]
     return matches[0] if len(matches) == 1 else None
+
+
+def _resolve_dynamic_task_files(target: str, source_file: str, file_ids: dict[str, str]) -> list[str]:
+    """Find in-repo candidates for a templated include without claiming certainty."""
+    pattern = re.sub(r"\{\{.*?\}\}", "*", target)
+    if PurePosixPath(pattern).name.startswith("*"):
+        return []
+    candidates = [pattern.removeprefix("tasks/"), str(PurePosixPath(source_file).parent / pattern)]
+    return sorted(
+        {
+            node_id
+            for candidate in candidates
+            for file_name, node_id in file_ids.items()
+            if fnmatch(file_name, candidate)
+        }
+    )
 
 
 def _condition(task: dict[str, Any]) -> str | None:
