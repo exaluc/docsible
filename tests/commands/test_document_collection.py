@@ -286,3 +286,41 @@ class TestCollectionComplexityOverview:
         assert readme.index("db_role", index_start) < readme.index(
             "proxy_role", index_start
         )
+
+
+class TestRoleLessDirHandling:
+    """Empty/non-role directories under roles/ (e.g. uninitialized git
+    submodules) must be skipped and reported, never documented as zero-task
+    roles, and never counted in the collection index. This is the candidate-7
+    finding fix and keeps `document --collection` in parity with `scan`.
+    """
+
+    def _with_stub_dir(self, tmp_path):
+        collection = _copy_collection(MULTI_ROLE_COLLECTION, tmp_path / "collection")
+        (collection / "roles" / "uninitialized_submodule_stub").mkdir()
+        return collection
+
+    def test_role_less_dir_not_documented(self, tmp_path):
+        collection = self._with_stub_dir(tmp_path)
+
+        _document(collection, dry_run=False)
+
+        stub = collection / "roles" / "uninitialized_submodule_stub"
+        assert not (stub / "README.md").exists()
+        assert not (stub / ".docsible").exists()
+
+    def test_role_less_dir_excluded_from_collection_index(self, tmp_path):
+        collection = self._with_stub_dir(tmp_path)
+
+        _document(collection, dry_run=False)
+
+        readme = (collection / "README.md").read_text()
+        assert "**3 roles**" in readme  # cache/db/proxy; the stub is excluded
+        assert "uninitialized_submodule_stub" not in readme
+
+    def test_dry_run_counts_only_valid_roles(self, tmp_path, capsys):
+        collection = self._with_stub_dir(tmp_path)
+
+        _document(collection, dry_run=True)
+
+        assert "would document 3 role(s)" in capsys.readouterr().out

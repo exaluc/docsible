@@ -2,7 +2,12 @@
 
 import json
 
-from docsible.graphs import EdgeKind, ResolutionStatus, build_role_execution_graph
+from docsible.graphs import (
+    EdgeKind,
+    NodeKind,
+    ResolutionStatus,
+    build_role_execution_graph,
+)
 
 
 def test_builds_static_dynamic_and_notify_relationships():
@@ -79,3 +84,38 @@ def test_preserves_external_role_boundaries_in_renderer_contract():
     assert role_edges[1].resolution is ResolutionStatus.DYNAMIC
     assert role_edges[1].target_id is None
     json.dumps(graph.to_dict())
+
+
+def test_loop_control_recorded_in_task_metadata():
+    graph = build_role_execution_graph(
+        {
+            "name": "web",
+            "defaults": [],
+            "vars": [],
+            "handlers": [],
+            "tasks": [
+                {
+                    "file": "main.yml",
+                    "tasks": [{}],
+                    "line_ranges": [(1, 3)],
+                    "mermaid": [
+                        {
+                            "name": "Loop custom var",
+                            "ansible.builtin.debug": {},
+                            "loop": ["a", "b"],
+                            "loop_control": {"loop_var": "entry", "index_var": "i"},
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    loop_nodes = [
+        node
+        for node in graph.nodes.values()
+        if node.kind is NodeKind.TASK and "loop_control" in node.metadata
+    ]
+    assert loop_nodes, "loop_control must be recorded on the task node"
+    assert loop_nodes[0].metadata["loop"] == "loop"
+    assert loop_nodes[0].metadata["loop_control"] == {"loop_var": "entry", "index_var": "i"}

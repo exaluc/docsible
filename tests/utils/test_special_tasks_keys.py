@@ -92,3 +92,27 @@ def test_block_task_shape_unchanged():
     assert result[1]["module"] == "debug"
     # An empty rescue list contributes no rescue entry
     assert len(result) == 2
+
+
+def test_loop_control_captured_with_loop():
+    result = process_special_task_keys({
+        "name": "Iterate",
+        "ansible.builtin.debug": {},
+        "loop": ["a", "b"],
+        "loop_control": {"loop_var": "entry", "index_var": "i", "label": "{{ entry }}", "pause": 5},
+    })
+    assert result[0]["loop"] == "loop"
+    # loop_var/index_var/label captured; pause (a control knob, not a name) is not
+    assert result[0]["loop_control"] == {"loop_var": "entry", "index_var": "i", "label": "{{ entry }}"}
+
+
+def test_loop_control_absent_for_plain_loop():
+    result = process_special_task_keys({"debug": {"msg": "x"}, "loop": ["a"]})
+    assert result[0]["loop"] == "loop"
+    assert "loop_control" not in result[0]
+
+
+def test_loop_control_ignored_without_a_loop():
+    result = process_special_task_keys({"name": "x", "debug": {}, "loop_control": {"loop_var": "v"}})
+    assert "loop" not in result[0]
+    assert "loop_control" not in result[0]

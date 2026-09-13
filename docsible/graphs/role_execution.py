@@ -10,6 +10,8 @@ from fnmatch import fnmatch
 from pathlib import PurePosixPath
 from typing import Any
 
+from docsible.utils.special_tasks_keys import extract_loop_control
+
 
 class NodeKind(str, Enum):
     ROLE = "role"
@@ -238,6 +240,8 @@ def _add_tasks(graph: RoleExecutionGraph, role_name: str, task_file: dict[str, A
             metadata["condition"] = condition
         if loop := _loop(task):
             metadata["loop"] = loop
+            if loop_control := extract_loop_control(task):
+                metadata["loop_control"] = loop_control
         graph.add_node(GraphNode(task_id, NodeKind.TASK, str(task.get("name", "Unnamed")), source, metadata))
         graph.add_edge(GraphEdge(EdgeKind.CONTAINS, file_ids[file_name], task_id, ResolutionStatus.STATIC, source))
         _add_variable_edges(graph, task_id, task, variables, source)

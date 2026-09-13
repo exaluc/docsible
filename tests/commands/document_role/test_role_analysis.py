@@ -136,3 +136,35 @@ class TestRenderAnalyzedRole:
             else:
                 blank_run = 0
         assert max_blank_run <= 2
+
+
+class TestLoopControlRendering:
+    def test_readme_loop_column_shows_custom_loop_var(self, tmp_path):
+        role = tmp_path / "loop_role"
+        (role / "tasks").mkdir(parents=True)
+        (role / "tasks" / "main.yml").write_text(
+            "---\n"
+            "- name: Loop with custom variable\n"
+            "  ansible.builtin.debug:\n"
+            "    msg: '{{ entry }}'\n"
+            "  loop:\n"
+            "    - a\n"
+            "    - b\n"
+            "  loop_control:\n"
+            "    loop_var: entry\n"
+        )
+        (role / "handlers").mkdir()
+        (role / "defaults").mkdir()
+        (role / "defaults" / "main.yml").write_text("---\nx: 1\n")
+
+        role_info = RoleInfoLoader().load(role)
+        analysis = analyze_role(role_info, role)
+        render_analyzed_role(
+            role_info=role_info,
+            role_path=role,
+            analysis=analysis,
+            output_path=role / "README.md",
+        )
+
+        readme = (role / "README.md").read_text()
+        assert "loop (as: entry)" in readme

@@ -214,7 +214,26 @@ def process_special_task_keys(
     )
     if loop_key is not None:
         processed_task["loop"] = loop_key
+        if loop_control := extract_loop_control(task):
+            processed_task["loop_control"] = loop_control
     if include_target is not None:
         processed_task["include_target"] = include_target
     tasks.append(processed_task)
     return tasks
+
+
+def extract_loop_control(task: dict[str, Any]) -> dict[str, Any]:
+    """Extract change-relevant ``loop_control`` fields from a raw task.
+
+    A custom ``loop_var``/``index_var``/``label`` is loop-local variable
+    binding, not a role variable, so it must be captured for both README
+    rendering and execution-graph variable scoping.
+    """
+    control = task.get("loop_control")
+    if not isinstance(control, dict):
+        return {}
+    return {
+        key: control[key]
+        for key in ("loop_var", "index_var", "label")
+        if key in control
+    }

@@ -1,7 +1,6 @@
 """Command for documenting Ansible collections."""
 
 import logging
-import os
 from pathlib import Path
 
 import click
@@ -15,6 +14,33 @@ from docsible.utils.git import get_repo_info
 from docsible.utils.project_structure import ProjectStructure
 
 logger = logging.getLogger(__name__)
+
+
+def _role_less_dirs(roles_dir: Path, valid_roles: list[Path]) -> list[str]:
+    """Names of immediate ``roles/*`` subdirectories that are not valid roles.
+
+    A directory counts as a role only if ``find_roles`` accepts it (has
+    tasks/defaults/vars/meta content). Empty dirs — typically uninitialized
+    git submodules — land here and must be reported, not documented as
+    zero-content roles.
+    """
+    if not roles_dir.is_dir():
+        return []
+    valid = {path.resolve() for path in valid_roles}
+    return sorted(
+        entry.name
+        for entry in roles_dir.iterdir()
+        if entry.is_dir() and entry.resolve() not in valid
+    )
+
+
+def _warn_role_less_dirs(names: list[str]) -> None:
+    for name in names:
+        logger.warning(
+            "Skipping roles/%s: no role content found "
+            "(no tasks/defaults/vars/meta; possibly an uninitialized submodule).",
+            name,
+        )
 
 
 def document_collection_roles(
@@ -105,12 +131,14 @@ def document_collection_roles(
         return
 
     if dry_run:
-        role_count = sum(
-            1
-            for marker in collection_markers
-            for role_path in ProjectStructure(str(marker.parent)).get_roles_dir().iterdir()
-            if role_path.is_dir()
-        )
+        role_count = 0
+        skipped: list[str] = []
+        for marker in collection_markers:
+            structure = ProjectStructure(str(marker.parent))
+            valid_roles = structure.find_roles()
+            role_count += len(valid_roles)
+            skipped.extend(_role_less_dirs(structure.get_roles_dir(), valid_roles))
+        _warn_role_less_dirs(skipped)
         click.echo(f"Dry-run: would document {role_count} role(s) in {collection_path}")
         return
 
@@ -138,12 +166,14 @@ def document_collection_roles(
         roles_dir = collection_structure.get_roles_dir()
 
         roles_info = []
+        # Use the same role discovery as `scan collection` (find_roles filters
+        # on real role content), so the two commands can never disagree about
+        # which directories are roles, and role-less dirs are never rendered.
+        valid_roles = collection_structure.find_roles()
+        _warn_role_less_dirs(_role_less_dirs(roles_dir, valid_roles))
         if roles_dir.exists() and roles_dir.is_dir():
-            for role_name in os.listdir(str(roles_dir)):
-                role_path = roles_dir / role_name
-
-                if not role_path.is_dir():
-                    continue
+            for role_path in sorted(valid_roles, key=lambda path: path.name):
+                role_name = role_path.name
 
                 # Load playbook content if specified
                 playbook_content = None

@@ -104,8 +104,12 @@ interface is `build_role_execution_graph(role_info)`.
 - Component architecture diagrams derive variable and handler edges from graph
   facts, replacing the old first-file and last-file proxy edges.
 - Task nodes preserve modern and legacy loop syntax (`loop`, `with_items`,
-  `with_first_found`, and other `with_*` forms); README task tables render a
-  Loop column when applicable.
+  `with_first_found`, and other `with_*` forms), and structured
+  `loop_control` — `loop_var`, `index_var`, `label` — is captured into the
+  task-node metadata and the serialized graph, and surfaced in the README
+  Loop column as `loop (as: <var>)`. This makes custom loop variables visible
+  (they are loop-local, not role variables) for both humans and external
+  renderers.
 - Complexity reports retain their structural metrics and add graph metrics:
   statically reachable task files, dynamic and unknown boundaries, external
   role references, loop tasks, notification edges, orphan task files,
@@ -157,6 +161,14 @@ interface is `build_role_execution_graph(role_info)`.
   (the `prometheus.prometheus` collection, 26 roles): first real collection
   exercised end-to-end; verifies collection support fixes and role-analysis
   parity below.
+- `dev-sec/ansible-collection-hardening` @ `3102eddbd116c5f8c1581aca543d372dbc326764`
+  (the `devsec.hardening` collection; loop/condition-heavy; 4 real roles +
+  2 uninitialized submodule dirs under `roles/`): verifies the loop_control
+  capture (2 `loop_var` usages now render as `loop (as: …)`), the collection
+  discovery parity (scan and `--collection` both report 4; the 2 empty
+  submodule dirs are skipped/warned and excluded from the index), and the
+  ENTERPRISE grouped diagram still reachable via explicit `--graph`
+  (`os_hardening`, 125 tasks / 23 files).
 
 ### Completed Graph Milestones
 
@@ -192,6 +204,20 @@ interface is `build_role_execution_graph(role_info)`.
    is deliberately an index of independent per-role facts, not a synthesized
    single "collection complexity" score — a collection has no single
    execution graph the way one role does.
+10. Capture `loop_control` (`loop_var`/`index_var`/`label`) into task-node
+    metadata and the serialized graph, and surface it in the README Loop
+    column as `loop (as: <var>)`. (Candidate 7 finding: source `loop_var`
+    appeared in 0 of 2 generated READMEs; now 2 of 2 render, with the graph
+    carrying the metadata.)
+11. Make collection role discovery consistent: `document role --collection`
+    now iterates `ProjectStructure.find_roles()` (the same filter `scan
+    collection` uses), so the two can no longer disagree on what is a role.
+    Role-less `roles/*` directories (e.g. uninitialized git submodules with
+    no `tasks`/`defaults`/`vars`/`meta`) are skipped, warned about, excluded
+    from the dry-run count and the collection Role Index, and never written
+    into. (Candidate 7 finding: `scan` found 4, `--collection` documented 6,
+    and 2 stub READMEs were silently written into empty submodule dirs
+    invisible to the parent `git status`; now 4 everywhere with warnings.)
 
 ### Next Graph Milestones
 
@@ -243,6 +269,15 @@ smaller/synthetic test collection did not surface:
   residual run at 2 consecutive blank lines.
 - `sections/overview.jinja2` printed a literal `\n` after every collection
   author name (a template typo, not an escape sequence). Fixed.
+- The per-role loop used a raw `os.listdir` of `roles/`, so it disagreed with
+  `scan`'s `find_roles` filter and treated uninitialized git submodules
+  (empty `roles/*` dirs) as zero-content roles: it miscounted in `--dry-run`,
+  wrote stub `README.md`/`.docsible` into submodule paths invisible to the
+  parent `git status`, and inflated the collection Role Index. Fixed: the
+  collection path now iterates `ProjectStructure.find_roles()` and skips +
+  warns on role-less dirs. (Found via
+  `dev-sec/ansible-collection-hardening`, which has 4 real roles + 2 empty
+  submodule dirs under `roles/`.)
 
 ## Remaining Duplication Work
 
