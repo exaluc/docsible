@@ -62,6 +62,10 @@ Project home: https://github.com/jier/docsible
 - Preset system — four built-in presets covering personal, team, enterprise, and consulting use cases
 - Suppression system — silence false-positive recommendations with audit trail and optional expiry
 - Interactive setup wizard (`docsible init`) with optional CI/CD workflow generation
+- Source-backed `RoleExecutionGraph` — typed include/import, cross-role, notification and variable edges, each with static / dynamic / unknown resolution and a source location
+- README "Execution Routes" + "Execution Graph Summary" — role entry point, statically vs dynamically reachable and unreachable files, and dynamic boundaries, instead of filesystem-order phases
+- Collections get per-role documentation plus a collection-level complexity overview and a role index sorted by complexity
+- Machine-readable `--output-format json` exposes the complexity metrics and the serialized execution graph for CI and downstream renderers
 
 ## Installation
 
@@ -125,7 +129,8 @@ docsible scan collection . --fail-on warning --output-format json
 
 ### `--output-format json`
 
-Use `--output-format json` with `docsible analyze role` for machine-readable output:
+Use `--output-format json` with `docsible analyze role` (also supported by
+`validate role` and `document role`) for machine-readable output:
 
 ```bash
 docsible analyze role --role . --output-format json
@@ -137,12 +142,25 @@ Output schema:
 {
   "role": "my-role",
   "findings": [
-    { "severity": "WARNING", "message": "No example playbook found", "category": "documentation" }
+    { "severity": "warning", "message": "No example playbook found", "category": "documentation" }
   ],
-  "summary": { "total": 3, "critical": 0, "warning": 2, "info": 1 },
-  "truncated": false
+  "summary": { "total": 3, "shown": 3, "critical": 0, "warning": 2, "info": 1 },
+  "truncated": false,
+  "complexity": {
+    "total_tasks": 3, "task_files": 1, "handlers": 0,
+    "task_includes": 0, "conditional_tasks": 1, "error_handlers": 0,
+    "static_reachable_task_files": 1, "dynamically_reachable_task_files": 0,
+    "unreachable_task_files": 0, "dynamic_boundaries": 0, "loop_tasks": 0,
+    "notification_edges": 0, "collection_dependencies": 0
+  },
+  "execution_graph": { "role_id": "role:my-role", "nodes": ["..."], "edges": ["..."] }
 }
 ```
+
+`complexity` is derived from the `RoleExecutionGraph` (the single source of
+truth for boundary, loop, notification and reachability counts), and
+`execution_graph` is the full serialized node/edge model. `truncated` applies
+to `findings`; the graph itself is never truncated.
 
 ### Ready-to-use CI examples
 

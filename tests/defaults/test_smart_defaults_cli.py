@@ -49,13 +49,13 @@ class TestSmartDefaultsCLI:
         # Complex role should have visualization enabled (smart default)
         content = output_file.read_text()
 
-        # Complex roles may use either Mermaid diagrams OR execution phases
+        # Complex roles may use either Mermaid diagrams OR execution routes
         has_mermaid = "```mermaid" in content
-        has_execution_phases = "Execution Phases" in content
+        has_execution_routes = "Execution Routes" in content
         has_architecture = "Architecture Overview" in content
 
-        assert has_mermaid or (has_execution_phases and has_architecture), \
-            f"Complex role should have visualization (mermaid: {has_mermaid}, phases: {has_execution_phases}, arch: {has_architecture})"
+        assert has_mermaid or (has_execution_routes and has_architecture), \
+            f"Complex role should have visualization (mermaid: {has_mermaid}, routes: {has_execution_routes}, arch: {has_architecture})"
 
     def test_user_override_respected(self, simple_role, tmp_path):
         """User --graph flag should override smart default."""

@@ -34,10 +34,10 @@ npx --yes jscpd docsible --pattern "**/*.py"
 
 `jscpd` is informational: its current baseline is 21 clones and 1.30% duplicated lines, not a zero-threshold gate. Update the baseline only after reviewing intentional duplication.
 
-## Verified Baseline (2026-08-27)
+## Verified Baseline (2026-09-13)
 
-- `uv run pytest`: 1156 passed, 10 warnings.
-- `uv run ruff check .`: 47 findings.
-- `uv run mypy docsible`: 3 errors in 2 files.
+- `uv run pytest` passes with 1215 tests (3 xpassed).
+- `uv run ruff check .` reports no findings.
+- `uv run mypy docsible` reports no issues.
 
 Treat these results as a starting point, not permission to introduce additional failures.
