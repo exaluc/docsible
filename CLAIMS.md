@@ -249,9 +249,12 @@ smaller/synthetic test collection did not surface:
 The source-only duplication scan is below the original baseline, but remaining
 duplication is prioritized by ownership and behavior rather than percentage.
 
-1. Consolidate role-information assembly into one read-only loader used by
-   commands and analyzers. This is the highest priority because duplicate
-   loaders previously produced divergent behavior.
+1. **Partially resolved.** Role complexity/execution-graph/recommendation
+   *analysis* is now consolidated in `role_analysis.py` (see Role Execution
+   Graph, milestone 7) and used identically by `document role`,
+   `document role --collection`, and `scan collection`. Role-information
+   *loading* still has one remaining duplicate: `RoleInfoBuilder` alongside
+   `RoleInfoLoader` (see Known Limitations).
 2. Consider a private helper for repeated integration-provider task traversal
    after the role-loader migration is complete.
 3. Review overlapping renderer model fields only when a concrete rendering
