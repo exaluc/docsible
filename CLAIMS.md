@@ -92,9 +92,16 @@ interface is `build_role_execution_graph(role_info)`.
   Ansible expressions are recorded without inventing a target.
 - README execution phases are now a static traversal from `tasks/main.yml`;
   conditional paths are annotated and unreachable files are identified rather
-  than being presented as filesystem-order phases.
+  than being presented as filesystem-order phases. The README presents these
+  as Execution Routes rather than placeholder phases.
 - Component architecture diagrams derive variable and handler edges from graph
   facts, replacing the old first-file and last-file proxy edges.
+- Task nodes preserve modern and legacy loop syntax (`loop`, `with_items`,
+  `with_first_found`, and other `with_*` forms); README task tables render a
+  Loop column when applicable.
+- Complexity reports retain their structural metrics and add graph metrics:
+  statically reachable task files, dynamic and unknown boundaries, external
+  role references, loop tasks, notification edges, and orphan task files.
 - The graph uses standard-library dataclasses for a small serializable core.
   NetworkX is not a Docsible dependency; a future visualization adapter may
   convert the graph for layout algorithms.
@@ -110,13 +117,21 @@ interface is `build_role_execution_graph(role_info)`.
   seven OS-specific branches retain their `when` conditions, and `vhosts.yml`
   is reached through its static import.
 
+### Completed Graph Milestones
+
+1. Preserve loop metadata on ordinary tasks and render it in documentation.
+2. Add graph-derived execution metrics alongside structural complexity counts.
+3. Replace placeholder phases with source-backed Execution Routes.
+4. Preserve static and dynamic cross-role boundaries in a JSON-serializable
+   renderer contract.
+
 ### Next Graph Milestones
 
 1. Publish a documented JSON graph contract after its node and edge fields are
    exercised by more external candidates.
 2. Resolve locally available roles in sibling role directories and collections;
    retain absent Galaxy/FQCN roles as explicit external-reference nodes.
-3. Add graph projections for dynamic task/role includes, loops, blocks,
+3. Add graph projections for dynamic task/role includes, blocks,
    rescue/always, and source-linked variable scopes without claiming static
    certainty where Ansible defers resolution.
 4. Make `graph_visualisation` a renderer adapter over this contract, using
