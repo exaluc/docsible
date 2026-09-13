@@ -480,3 +480,66 @@ class TestArchitectureDiagram:
         assert "-->" in diagram or "-.notify.->" in diagram
         assert "classDef" in diagram
         assert "class" in diagram
+
+
+def _role_info_with_files(files):
+    return {
+        "name": "r",
+        "defaults": [],
+        "vars": [],
+        "handlers": [],
+        "tasks": [{"file": name, "tasks": [{}] * n} for name, n in files],
+    }
+
+
+def _group_node_count(mermaid):
+    return sum(
+        1
+        for line in mermaid.splitlines()
+        if line.lstrip().startswith("group_") and "[" in line
+    )
+
+
+class TestGroupedOverviewBounding:
+    """Regression tests for the flat-layout grouping failure found while
+    re-running candidate 7 (os_hardening: 23 flat task files became 23
+    'groups' -> an unreadable 100-line diagram). Nested layouts (candidate 5,
+    9 directory groups) must stay untouched.
+    """
+
+    def test_flat_layout_is_bounded_with_other_bucket(self):
+        from docsible.diagrams.types.architecture import _MAX_GROUP_NODES
+        from docsible.graphs import build_role_execution_graph
+
+        files = [("main.yml", 2)] + [(f"sec_{i}.yml", 1) for i in range(22)]
+        role_info = _role_info_with_files(files)
+        graph = build_role_execution_graph(role_info)
+
+        mermaid = generate_component_architecture(
+            role_info, None, execution_graph=graph
+        )
+
+        assert "Grouped execution overview" in mermaid
+        assert "group_other[" in mermaid
+        assert "13 task files" in mermaid  # 23 - entry - 9 largest folded into other
+        assert _group_node_count(mermaid) <= _MAX_GROUP_NODES + 1
+        assert '1 task file"' in mermaid  # singular for one-file groups
+        assert "1 task files" not in mermaid  # no plural on a single file
+
+    def test_nested_layout_within_cap_is_not_folded(self):
+        from docsible.graphs import build_role_execution_graph
+
+        files = [("main.yml", 1)] + [
+            (f"dir_{d}/x{i}.yml", 1) for d in range(8) for i in range(3)
+        ]  # 25 files (>20 -> grouped) but 8 directories + entry = 9 groups
+        role_info = _role_info_with_files(files)
+        graph = build_role_execution_graph(role_info)
+
+        mermaid = generate_component_architecture(
+            role_info, None, execution_graph=graph
+        )
+
+        assert "Grouped execution overview" in mermaid
+        assert "group_other[" not in mermaid  # 9 groups <= cap -> no folding
+        assert _group_node_count(mermaid) == 9  # entry + 8 directories
+        assert "3 task files" in mermaid  # each directory keeps 3 files

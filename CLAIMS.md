@@ -218,6 +218,21 @@ interface is `build_role_execution_graph(role_info)`.
     into. (Candidate 7 finding: `scan` found 4, `--collection` documented 6,
     and 2 stub READMEs were silently written into empty submodule dirs
     invisible to the parent `git status`; now 4 everywhere with warnings.)
+12. Bound the grouped-execution overview for flat task directories. Grouping
+    keyed on the first path segment, so a nested layout already compresses
+    (official nginx: 31 files → 9 directory nodes, 50 mermaid lines) but a
+    flat layout degenerated to one node per file (os_hardening: 23 files → 23
+    nodes, 100 lines — the densest diagram in the corpus). Added a hard node
+    cap (`_MAX_GROUP_NODES = 10`): when grouping yields more groups than the
+    cap, keep the entry point and the largest groups by task count and fold
+    the remainder into one `other (N task files)` node; hub fan-out into the
+    bucket collapses via the existing edge dedup. Verified: os_hardening
+    23 → 11 nodes (100 → 52 lines) with an `other (13 task files)` bucket;
+    nested layouts at or under the cap render unchanged (official nginx stays
+    at 9 directory nodes, no bucket). Also fixed label pluralization (`1 task
+    file` vs `N task files`). This subsumes finding B (nested roles already
+    give the bounded multi-level view); finding D stays deferred (see Next
+    Graph Milestones).
 
 ### Next Graph Milestones
 

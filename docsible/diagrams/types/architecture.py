@@ -13,6 +13,11 @@ logger = logging.getLogger(__name__)
 _DETAILED_FILE_BUDGET = 20
 _DETAILED_EDGE_BUDGET = 35
 _DETAILED_FANOUT_BUDGET = 8
+# Hard cap on visible group nodes in the grouped overview, so a flat tasks/
+# directory (where each file is its own pseudo-group) cannot produce a wall of
+# near-identical single-file nodes. Kept above real nested layouts (e.g. the
+# official nginx role's 9 directories) so those render unchanged.
+_MAX_GROUP_NODES = 10
 
 
 def generate_component_architecture(
@@ -245,20 +250,46 @@ def _should_group_execution_graph(execution_graph: Any, task_files: list[dict[st
 def _generate_grouped_architecture(role_info: dict[str, Any], execution_graph: Any) -> str:
     """Render a bounded directory-level overview from graph facts."""
     task_nodes = [node for node in execution_graph.nodes.values() if node.kind.value == "task_file"]
+    file_task_count = {
+        node.metadata["file"]: node.metadata.get("task_count", 0) for node in task_nodes
+    }
+
     groups: dict[str, list[str]] = {}
-    for node in task_nodes:
-        file_name = node.metadata["file"]
+    for file_name in file_task_count:
         group = "entry point" if file_name == "main.yml" else file_name.split("/", 1)[0]
         groups.setdefault(group, []).append(file_name)
+
+    # Bound the overview: keep the entry point and the largest groups by task
+    # count, and fold everything else into a single ``other`` bucket. This only
+    # engages when grouping fails to compress (flat directories), leaving nested
+    # layouts like the official nginx role untouched.
+    if len(groups) > _MAX_GROUP_NODES:
+        ranked = sorted(
+            (group for group in groups if group != "entry point"),
+            key=lambda group: sum(file_task_count[file] for file in groups[group]),
+            reverse=True,
+        )
+        keep = {"entry point", *ranked[: _MAX_GROUP_NODES - 1]}
+        other_files = [
+            file_name for group, files in groups.items() if group not in keep for file_name in files
+        ]
+        groups = {group: files for group, files in groups.items() if group in keep}
+        if other_files:
+            groups["other"] = sorted(other_files)
 
     def node_id(group: str) -> str:
         return "group_" + re.sub(r"[^A-Za-z0-9_]", "_", group)
 
+    def group_label(group: str, files: list[str]) -> str:
+        if group == "entry point":
+            return "main.yml"
+        noun = "task file" if len(files) == 1 else "task files"
+        return f"{group}<br/>{len(files)} {noun}"
+
     file_group = {file_name: group for group, files in groups.items() for file_name in files}
     lines = ["graph TB", '    overview["Grouped execution overview"]']
     for group, files in sorted(groups.items()):
-        label = "main.yml" if group == "entry point" else f"{group}<br/>{len(files)} task files"
-        lines.append(f'    {node_id(group)}["{label}"]')
+        lines.append(f'    {node_id(group)}["{group_label(group, files)}"]')
         lines.append(f"    overview --> {node_id(group)}")
 
     task_to_file = {
