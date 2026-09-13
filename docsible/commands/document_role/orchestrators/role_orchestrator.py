@@ -85,7 +85,7 @@ class RoleOrchestrator:
             self._validate_documentation(role_info, analysis_report, diagrams, dependency_data)
 
         # Step 7.5: Generate recommendations (use validated role_path from step 1)
-        recommendations = generate_all_recommendations(role_path)
+        recommendations = generate_all_recommendations(role_path, analysis_report)
 
         if self.context.analysis.apply_suppressions:
             from docsible.suppression.engine import apply_suppressions

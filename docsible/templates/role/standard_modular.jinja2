@@ -13,6 +13,15 @@
 {% include 'sections/argument_specs.jinja2' %}
 {% endif %}
 {% endif %}
+{% if not no_diagrams %}
+{% include 'sections/complexity_analysis.jinja2' %}
+{% include 'sections/simplification_suggestions.jinja2' %}
+{% include 'sections/adaptive_diagrams.jinja2' %}
+{% include 'sections/integration_boundary.jinja2' %}
+{% endif %}
+{% if role.defaults or role.vars %}
+## Variable Reference
+{% endif %}
 {% if role.defaults %}
 {% include 'sections/defaults.jinja2' %}
 {% endif %}
@@ -20,16 +29,11 @@
 {% include 'sections/vars.jinja2' %}
 {% endif %}
 {% if not no_tasks %}
+## Task File Reference
 {% include 'sections/tasks.jinja2' %}
 {% endif %}
 {% if not no_handlers %}
 {% include 'sections/handlers.jinja2' %}
-{% endif %}
-{% if not no_diagrams %}
-{% include 'sections/complexity_analysis.jinja2' %}
-{% include 'sections/simplification_suggestions.jinja2' %}
-{% include 'sections/adaptive_diagrams.jinja2' %}
-{% include 'sections/integration_boundary.jinja2' %}
 {% endif %}
 {% include 'sections/playbook.jinja2' %}
 {% include 'sections/dependencies.jinja2' %}

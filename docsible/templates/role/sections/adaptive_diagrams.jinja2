@@ -61,6 +61,16 @@ This role contains **{{ complexity_report.metrics.total_tasks }} tasks** across 
 - Task Includes: {{ complexity_report.metrics.task_includes }}
 - Role Dependencies: {{ complexity_report.metrics.role_dependencies }}
 
+### Execution Graph Summary
+- Collection dependencies: {{ complexity_report.metrics.collection_dependencies }}
+- Conditional decision points: {{ complexity_report.metrics.conditional_decision_points }}
+- Statically reachable task files: {{ complexity_report.metrics.static_reachable_task_files }}
+- Dynamic boundaries: {{ complexity_report.metrics.dynamic_boundaries }}
+- Unknown boundaries: {{ complexity_report.metrics.unknown_boundaries }}
+- Handler notification edges: {{ complexity_report.metrics.notification_edges }}
+- Loop-bearing tasks: {{ complexity_report.metrics.loop_tasks }}
+- Orphan task files: {{ complexity_report.metrics.orphan_task_files }}
+
 {% if architecture_diagram %}
 ### Component Architecture
 This diagram shows the internal structure and data flow of the role:
