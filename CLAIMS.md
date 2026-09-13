@@ -253,6 +253,37 @@ interface is `build_role_execution_graph(role_info)`.
     22). Any future boundary count must read from the graph — not add a second
     scan — to keep this single source of truth.
 
+### Complexity ownership: graph vs residual scans
+
+`analyze_role_complexity` still mixes two kinds of computation. Goal: make the
+`RoleExecutionGraph` the authoritative source for as much as is graph-shaped, so
+the same fact is never computed twice by two implementations (the
+`task_includes`/legacy-`include:` drift was the first instance of this class).
+
+- Derived from the graph (single source of truth): `task_includes`,
+  `role_includes`, `static_reachable_task_files`, `dynamic_boundaries`,
+  `unknown_boundaries`, `external_role_references`, `loop_tasks`,
+  `notification_edges`, `orphan_task_files`, `conditional_decision_points`.
+- Still computed by separate scans of `role_info` (acceptable structural
+  counts): `total_tasks`, `task_files`, `handlers`, `max_tasks_per_file`,
+  `avg_tasks_per_file`; meta reads `role_dependencies`,
+  `collection_dependencies`; and the non-graph analyzers
+  `external_integrations` (`detect_integrations`), `file_details`
+  (`analyze_file_complexity`), and the hotspot/inflection detectors.
+- Two residual scans are flagged risks, not yet fixed:
+  - `conditional_tasks` and the graph-derived `conditional_decision_points`
+    measure the same concept through two implementations. They agree on every
+    tested role today (CIS: 592 = 592) but can silently drift, exactly like
+    `task_includes` did before it was made graph-derived. Recommendation:
+    keep the graph-derived value authoritative and drop or alias the scan.
+  - `error_handlers` is effectively dead: it counts `task.get("rescue") or
+    task.get("always")` over the *flattened processed* tasks, but the
+    flattener emits block/rescue/always as separate rows (with `module`),
+    never as a `rescue`/`always` key on a task — so it reports **0** even for
+    a role with ~189 blocks (verified on `UBUNTU22-CIS`). It is both
+    mis-implemented and a residual scan; the right owner is the graph, which
+    already walks real block/rescue/always — see Next Graph Milestones #3.
+
 ### Next Graph Milestones
 
 1. Publish a documented JSON graph contract after its node and edge fields are
@@ -263,9 +294,19 @@ interface is `build_role_execution_graph(role_info)`.
    full collection-wide dependency graph, which was assessed as low value:
    readers almost always want one role's own dependencies, not a map of all
    roles' relationships).
+   Status: the primitives already exist — `EXTERNAL_ROLE` nodes,
+   `INCLUDES_ROLE`/`IMPORTS_ROLE` edges, the `unresolved_external` resolution
+   state, and a now graph-derived `role_includes` count. What this milestone
+   adds is (a) resolving a `name`/FQCN reference that matches a sibling
+   `roles/<name>` into an internal node, (b) honoring `tasks_from` for a
+   precise entry-point edge, and (c) a thin composition layer that joins the
+   per-role graphs via those role edges. This is the concrete building block
+   for the collection milestone and is incremental on the existing model, not
+   a new subsystem.
 3. Add graph projections for blocks, rescue/always, and source-linked
    variable scopes without claiming static certainty where Ansible defers
-   resolution.
+   resolution. Fixing block/rescue/always representation here also repairs
+   the dead `error_handlers` metric (see Complexity ownership above).
 4. Make `graph_visualisation` a renderer adapter over this contract, using
    NetworkX only for renderer-specific layout work.
 5. Extend the pinned external corpus before treating the graph contract as
@@ -344,17 +385,28 @@ smaller/synthetic test collection did not surface:
 The source-only duplication scan is below the original baseline, but remaining
 duplication is prioritized by ownership and behavior rather than percentage.
 
-1. **Partially resolved.** Role complexity/execution-graph/recommendation
-   *analysis* is now consolidated in `role_analysis.py` (see Role Execution
-   Graph, milestone 7) and used identically by `document role`,
-   `document role --collection`, and `scan collection`. Role-information
-   *loading* still has one remaining duplicate: `RoleInfoBuilder` alongside
-   `RoleInfoLoader` (see Known Limitations).
-2. Consider a private helper for repeated integration-provider task traversal
+1. **Largely resolved.** Role complexity/execution-graph/recommendation
+   *analysis* is now consolidated in `role_analysis.py` (milestone 7), the
+   `RoleExecutionGraph` is built once per command and threaded (milestone 13),
+   and include/role boundary counts are graph-derived (milestone 14). Used
+   identically by `document role`, `document role --collection`, and
+   `scan collection`.
+2. Collapse the remaining duplicate complexity scans into the graph so a fact
+   is computed once: `conditional_tasks` (alias/derive from
+   `conditional_decision_points`) and `error_handlers` (via real
+   block/rescue/always projection, Next Graph Milestones #3). Until then they
+   are two implementations of one concept and can drift.
+3. Role-information *loading* still has one remaining duplicate: the deprecated
+   `RoleInfoBuilder` alongside `RoleInfoLoader` (see Known Limitations).
+   Retire `RoleInfoBuilder` and the deprecated `docsible role` command, and
+   finish single-path loading, **before** freezing the public JSON graph
+   contract (Next Graph Milestones #1) so that contract ships against a
+   de-duplicated, stable surface rather than being revised after the fact.
+4. Consider a private helper for repeated integration-provider task traversal
    after the role-loader migration is complete.
-3. Review overlapping renderer model fields only when a concrete rendering
+5. Review overlapping renderer model fields only when a concrete rendering
    change requires them to move together.
-4. Remove obsolete duplicate tests and generated fixture backups only after
+6. Remove obsolete duplicate tests and generated fixture backups only after
    confirming they are not test contracts.
 
 ## Scope of This Document
