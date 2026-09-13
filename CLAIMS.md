@@ -236,6 +236,15 @@ interface is `build_role_execution_graph(role_info)`.
    NetworkX only for renderer-specific layout work.
 5. Extend the pinned external corpus before treating the graph contract as
    release-stable.
+6. (Finding D, deferred) Surface diagram tiering for `--graph`: COMPLEX and
+   ENTERPRISE roles currently render only the file-level architecture
+   diagram; per-task-file flow diagrams are shown only for SIMPLE/MEDIUM.
+   This is by design (a task-level graph is unreadable at that size), not a
+   defect, so no inline disclaimer is added yet. The genuine remedy is to
+   expose task-level flow through the interactive `graph_visualisation`
+   adapter (item 4), where the "too large for Mermaid" content belongs; the
+   README note, if ever needed, should be written once that adapter exists so
+   it does not churn.
 
 ## Collection Support
 
