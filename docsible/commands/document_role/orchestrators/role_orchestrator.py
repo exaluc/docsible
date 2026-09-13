@@ -9,8 +9,8 @@ from pathlib import Path
 
 import click
 
-from docsible.analyzers.recommendations import generate_all_recommendations
 from docsible.commands.document_role.models import RoleCommandContext
+from docsible.commands.document_role.role_analysis import analyze_role
 from docsible.commands.role_info_loader import RoleInfoLoader
 from docsible.formatters.text.dry_run import DryRunFormatter
 from docsible.models.recommendation import Recommendation
@@ -55,8 +55,10 @@ class RoleOrchestrator:
         # Step 3: Build role info
         role_info = self._build_role_info(role_path, playbook_content)
 
-        # Step 4: Analyze complexity
-        analysis_report = self._analyze_complexity(role_info)
+        # Step 4: Analyze complexity + recommendations (shared with
+        # `document role --collection` and `scan collection`)
+        analysis = self._analyze_role(role_info, role_path)
+        analysis_report = analysis.complexity_report
 
         if (
             self.context.analysis.recommendations_only
@@ -84,8 +86,9 @@ class RoleOrchestrator:
         ):
             self._validate_documentation(role_info, analysis_report, diagrams, dependency_data)
 
-        # Step 7.5: Generate recommendations (use validated role_path from step 1)
-        recommendations = generate_all_recommendations(role_path, analysis_report)
+        # Step 7.5: Recommendations were already computed alongside complexity
+        # in step 4 (shared analyze_role()), using the validated role_path.
+        recommendations = analysis.recommendations
 
         if self.context.analysis.apply_suppressions:
             from docsible.suppression.engine import apply_suppressions
@@ -213,31 +216,31 @@ class RoleOrchestrator:
             read_docsible=not self.context.processing.no_docsible,
         )
 
-    def _analyze_complexity(self, role_info: dict):
-        """Analyze role complexity.
+    def _analyze_role(self, role_info: dict, role_path: Path):
+        """Analyze role complexity and recommendations.
 
-        Reuses cached analysis from smart defaults if available to avoid
+        Delegates to the shared `analyze_role()` used by `document role
+        --collection` and `scan collection`, so all three produce identical
+        complexity/execution-graph/recommendation results for a given role.
+        Reuses cached complexity from smart defaults if available, to avoid
         duplicate analysis.
 
         Args:
             role_info: Role information dictionary
+            role_path: Validated path to the role directory
 
         Returns:
-            Complexity analysis report
+            RoleAnalysis with complexity_report and recommendations
         """
-        # Check if we have a cached report from smart defaults
         if self.context.analysis.cached_complexity_report:
             logger.debug("Reusing complexity analysis from smart defaults (avoiding duplicate)")
-            return self.context.analysis.cached_complexity_report
 
-        # No cached report available, perform fresh analysis
-        from docsible.analyzers import analyze_role_complexity
-
-        logger.debug("Performing fresh complexity analysis")
-        return analyze_role_complexity(
+        return analyze_role(
             role_info,
+            role_path,
             include_patterns=self.context.analysis.simplification_report,
             min_confidence=0.7,
+            cached_complexity_report=self.context.analysis.cached_complexity_report,
         )
 
     def _display_analysis_and_exit(self, analysis_report, role_info: dict) -> None:

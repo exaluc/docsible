@@ -41,6 +41,7 @@ def _document(
     repository_url: str = "",
     repo_type: str = "",
     repo_branch: str = "",
+    no_diagrams: bool = True,
 ) -> None:
     document_collection_roles(
         collection_path=str(collection_path),
@@ -55,7 +56,7 @@ def _document(
         hybrid=False,
         no_vars=False,
         no_tasks=False,
-        no_diagrams=True,
+        no_diagrams=no_diagrams,
         simplify_diagrams=False,
         no_examples=False,
         no_metadata=False,
@@ -212,4 +213,76 @@ class TestCollectionReadmeGeneration:
         assert max_blank_run <= 2, (
             f"found a run of {max_blank_run} consecutive blank lines in the "
             "generated collection README"
+        )
+
+
+class TestCollectionRoleAnalysisParity:
+    """Regression tests for the collection-parity gap: roles documented as
+    part of a collection previously skipped complexity analysis, the
+    execution graph, and recommendations entirely (they were only computed
+    by standalone `document role`). `document_collection_roles()` must now
+    route every role through the same `analyze_role()` /
+    `render_analyzed_role()` pipeline.
+    """
+
+    def test_complex_collection_role_gets_architecture_and_execution_routes(self, tmp_path):
+        collection = _copy_collection(MINIMAL_COLLECTION, tmp_path / "collection")
+        tasks_path = collection / "roles" / "web_role" / "tasks" / "main.yml"
+        tasks = "\n".join(
+            f"- name: Task {i}\n  debug:\n    msg: 'step {i}'" for i in range(30)
+        )
+        tasks_path.write_text(f"---\n{tasks}\n")
+
+        _document(collection, dry_run=False, no_diagrams=False)
+
+        role_readme = (collection / "roles" / "web_role" / "README.md").read_text()
+        assert "## Architecture Overview" in role_readme
+        assert "### Execution Graph Summary" in role_readme
+        assert "### Execution Routes" in role_readme
+
+    def test_simple_collection_role_still_renders_without_error(self, tmp_path):
+        collection = _copy_collection(MINIMAL_COLLECTION, tmp_path / "collection")
+
+        _document(collection, dry_run=False, no_diagrams=False)
+
+        role_readme_path = collection / "roles" / "web_role" / "README.md"
+        assert role_readme_path.exists()
+
+
+class TestCollectionComplexityOverview:
+    """The collection-level README must show an at-a-glance complexity
+    breakdown and a per-role index sorted by complexity (most involved
+    first), so a reader knows which roles need attention before opening
+    any of them individually.
+    """
+
+    def test_collection_readme_has_complexity_overview_and_role_index(self, tmp_path):
+        collection = _copy_collection(MULTI_ROLE_COLLECTION, tmp_path / "collection")
+
+        _document(collection, dry_run=False)
+
+        readme = (collection / "README.md").read_text()
+        assert "## Complexity Overview" in readme
+        assert "### Role Index" in readme
+        assert "cache_role" in readme
+        assert "db_role" in readme
+        assert "proxy_role" in readme
+
+    def test_role_index_sorts_most_complex_role_first(self, tmp_path):
+        collection = _copy_collection(MULTI_ROLE_COLLECTION, tmp_path / "collection")
+        tasks_path = collection / "roles" / "db_role" / "tasks" / "main.yml"
+        tasks = "\n".join(
+            f"- name: Task {i}\n  debug:\n    msg: 'step {i}'" for i in range(30)
+        )
+        tasks_path.write_text(f"---\n{tasks}\n")
+
+        _document(collection, dry_run=False)
+
+        readme = (collection / "README.md").read_text()
+        index_start = readme.index("### Role Index")
+        assert readme.index("db_role", index_start) < readme.index(
+            "cache_role", index_start
+        )
+        assert readme.index("db_role", index_start) < readme.index(
+            "proxy_role", index_start
         )

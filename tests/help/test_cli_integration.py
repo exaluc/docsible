@@ -50,9 +50,9 @@ class TestBriefHelpCommand:
 
     def test_role_help_shows_brief_by_default(self):
         """Default --help should show brief help with --help-full pointer."""
-        try:
-            from docsible.utils.cli_helpers import BriefHelpCommand
-        except ImportError:
+        import docsible.utils.cli_helpers as cli_helpers
+
+        if not hasattr(cli_helpers, "BriefHelpCommand"):
             pytest.skip("BriefHelpCommand not yet implemented in cli_helpers.py")
         from docsible.cli import cli
         runner = CliRunner()
@@ -63,9 +63,9 @@ class TestBriefHelpCommand:
 
     def test_role_full_help_shows_more_options(self):
         """--help-full should show all options (more than brief help)."""
-        try:
-            from docsible.utils.cli_helpers import BriefHelpCommand
-        except ImportError:
+        import docsible.utils.cli_helpers as cli_helpers
+
+        if not hasattr(cli_helpers, "BriefHelpCommand"):
             pytest.skip("BriefHelpCommand not yet implemented in cli_helpers.py")
         from docsible.cli import cli
         runner = CliRunner()
@@ -75,9 +75,9 @@ class TestBriefHelpCommand:
 
     def test_role_full_help_has_more_lines_than_brief(self):
         """Full help should produce more output lines than brief help."""
-        try:
-            from docsible.utils.cli_helpers import BriefHelpCommand
-        except ImportError:
+        import docsible.utils.cli_helpers as cli_helpers
+
+        if not hasattr(cli_helpers, "BriefHelpCommand"):
             pytest.skip("BriefHelpCommand not yet implemented in cli_helpers.py")
         from docsible.cli import cli
         runner = CliRunner()

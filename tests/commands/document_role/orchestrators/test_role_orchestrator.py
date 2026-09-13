@@ -107,14 +107,16 @@ class TestRoleOrchestrator:
         assert "name" in role_info
         assert role_info["name"] == "test_role"
 
-    def test_analyze_complexity(self, minimal_context, temp_role_dir):
-        """Test complexity analysis."""
+    def test_analyze_role(self, minimal_context, temp_role_dir):
+        """Test complexity + recommendation analysis (shared with collection/scan)."""
         minimal_context.paths.role_path = temp_role_dir
         orchestrator = RoleOrchestrator(minimal_context)
 
         role_info = orchestrator._build_role_info(temp_role_dir, None)
-        analysis_report = orchestrator._analyze_complexity(role_info)
+        analysis = orchestrator._analyze_role(role_info, temp_role_dir)
+        analysis_report = analysis.complexity_report
 
+        assert analysis.recommendations is not None
         assert analysis_report is not None
         assert hasattr(analysis_report, "category")
         assert hasattr(analysis_report, "metrics")
@@ -143,7 +145,7 @@ class TestRoleOrchestrator:
         orchestrator = RoleOrchestrator(minimal_context)
 
         role_info = orchestrator._build_role_info(temp_role_dir, None)
-        analysis_report = orchestrator._analyze_complexity(role_info)
+        analysis_report = orchestrator._analyze_role(role_info, temp_role_dir).complexity_report
 
         diagrams = orchestrator._generate_diagrams(role_info, analysis_report, None)
 
@@ -156,7 +158,7 @@ class TestRoleOrchestrator:
         orchestrator = RoleOrchestrator(minimal_context)
 
         role_info = orchestrator._build_role_info(temp_role_dir, None)
-        analysis_report = orchestrator._analyze_complexity(role_info)
+        analysis_report = orchestrator._analyze_role(role_info, temp_role_dir).complexity_report
 
         diagrams = orchestrator._generate_diagrams(role_info, analysis_report, None)
 
@@ -172,7 +174,7 @@ class TestRoleOrchestrator:
         orchestrator = RoleOrchestrator(minimal_context)
 
         role_info = orchestrator._build_role_info(temp_role_dir, None)
-        analysis_report = orchestrator._analyze_complexity(role_info)
+        analysis_report = orchestrator._analyze_role(role_info, temp_role_dir).complexity_report
 
         dependency_data = orchestrator._generate_dependencies(role_info, analysis_report)
 
@@ -187,7 +189,7 @@ class TestRoleOrchestrator:
         orchestrator = RoleOrchestrator(minimal_context)
 
         role_info = orchestrator._build_role_info(temp_role_dir, None)
-        analysis_report = orchestrator._analyze_complexity(role_info)
+        analysis_report = orchestrator._analyze_role(role_info, temp_role_dir).complexity_report
         diagrams = {"generate_graph": False}
         dependency_data = {
             "dependency_matrix": None,
@@ -214,7 +216,7 @@ class TestRoleOrchestrator:
         mock_renderer_class.return_value = mock_renderer
 
         role_info = orchestrator._build_role_info(temp_role_dir, None)
-        analysis_report = orchestrator._analyze_complexity(role_info)
+        analysis_report = orchestrator._analyze_role(role_info, temp_role_dir).complexity_report
         diagrams = {
             "generate_graph": False,
             "mermaid_code_per_file": {},
@@ -256,7 +258,7 @@ class TestRoleOrchestrator:
         mock_renderer_class.return_value = mock_renderer
 
         role_info = orchestrator._build_role_info(temp_role_dir, None)
-        analysis_report = orchestrator._analyze_complexity(role_info)
+        analysis_report = orchestrator._analyze_role(role_info, temp_role_dir).complexity_report
         diagrams = {
             "generate_graph": False,
             "mermaid_code_per_file": {},

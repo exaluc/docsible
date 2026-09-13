@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 import yaml
 
+from docsible.commands.document_role.role_analysis import analyze_role, render_analyzed_role
 from docsible.commands.role_info_loader import RoleInfoLoader
 from docsible.exceptions import CollectionNotFoundError
 from docsible.renderers.readme_renderer import ReadmeRenderer
@@ -176,26 +177,72 @@ def document_collection_roles(
 
                     role_info["docsible"] = manage_docsible_file_keys(role_path / ".docsible")
 
-                renderer = ReadmeRenderer(backup=not no_backup)
+                # Analyze complexity, execution graph, and recommendations —
+                # identical to standalone `document role` and `scan collection`
+                # (previously this was skipped entirely for collection roles).
+                analysis = analyze_role(role_info, role_path, min_confidence=0.7)
+
                 role_readme_path = role_path / output
                 template_type = "hybrid" if hybrid else "standard_modular"
 
-                renderer.render_role(
+                render_analyzed_role(
                     role_info=role_info,
+                    role_path=role_path,
+                    analysis=analysis,
                     output_path=role_readme_path,
                     template_type=template_type,
                     custom_template_path=md_role_template,
+                    generate_graph=graph,
+                    minimal=minimal,
+                    simplify_diagrams=simplify_diagrams,
                     no_vars=no_vars,
                     no_tasks=no_tasks,
                     no_diagrams=no_diagrams,
-                    simplify_diagrams=simplify_diagrams,
                     no_examples=no_examples,
                     no_metadata=no_metadata,
                     no_handlers=no_handlers,
+                    include_complexity=hybrid,
                     append=append,
+                    backup=not no_backup,
+                    playbook_content=playbook_content,
                 )
 
-                logger.info(f"✓ Documented role: {role_name}")
+                warning_count = sum(
+                    1 for r in analysis.recommendations if r.severity.value == "warning"
+                )
+                critical_count = sum(
+                    1 for r in analysis.recommendations if r.severity.value == "critical"
+                )
+                logger.info(
+                    f"✓ Documented role: {role_name} "
+                    f"({analysis.complexity_report.category.value}, "
+                    f"{critical_count} critical, {warning_count} warning)"
+                )
+
+                # Summary fields for the collection-level Role Index (a human
+                # scanning the collection README needs to see, at a glance,
+                # which roles are complex/risky before opening any of them).
+                category = analysis.complexity_report.category.value
+                role_info["complexity_category"] = category
+                role_info["complexity_rank"] = {
+                    "simple": 0,
+                    "medium": 1,
+                    "complex": 2,
+                    "enterprise": 3,
+                }.get(category, 0)
+                role_info["complexity_badge"] = {
+                    "simple": "🟢 SIMPLE",
+                    "medium": "🟡 MEDIUM",
+                    "complex": "🟠 COMPLEX",
+                    "enterprise": "🔴 ENTERPRISE",
+                }.get(category, category.upper())
+                role_info["complexity_task_count"] = analysis.complexity_report.metrics.total_tasks
+                role_info["complexity_critical_count"] = critical_count
+                role_info["complexity_warning_count"] = warning_count
+                role_info["complexity_top_finding"] = (
+                    analysis.recommendations[0].message if analysis.recommendations else None
+                )
+
                 roles_info.append(role_info)
 
         # Generate collection README

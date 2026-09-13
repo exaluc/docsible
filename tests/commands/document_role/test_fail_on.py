@@ -58,10 +58,9 @@ def _make_orchestrator(context: RoleCommandContext) -> RoleOrchestrator:
 _PATCH_VALIDATE = "docsible.commands.document_role.orchestrators.role_orchestrator.RoleOrchestrator._validate_paths"
 _PATCH_PLAYBOOK = "docsible.commands.document_role.orchestrators.role_orchestrator.RoleOrchestrator._load_playbook"
 _PATCH_BUILD = "docsible.commands.document_role.orchestrators.role_orchestrator.RoleOrchestrator._build_role_info"
-_PATCH_COMPLEXITY = "docsible.commands.document_role.orchestrators.role_orchestrator.RoleOrchestrator._analyze_complexity"
+_PATCH_ANALYZE = "docsible.commands.document_role.orchestrators.role_orchestrator.RoleOrchestrator._analyze_role"
 _PATCH_DIAGRAMS = "docsible.commands.document_role.orchestrators.role_orchestrator.RoleOrchestrator._generate_diagrams"
 _PATCH_DEPS = "docsible.commands.document_role.orchestrators.role_orchestrator.RoleOrchestrator._generate_dependencies"
-_PATCH_RECS = "docsible.commands.document_role.orchestrators.role_orchestrator.generate_all_recommendations"
 _PATCH_SUPPRESSIONS = "docsible.commands.document_role.orchestrators.role_orchestrator.RoleOrchestrator"
 
 
@@ -71,7 +70,7 @@ def _run_execute_with_recs(recs: list[Recommendation], context: RoleCommandConte
 
     fake_path = Path("/fake/role")
     fake_role_info: dict = {"name": "fake_role"}
-    fake_analysis = MagicMock()
+    fake_analysis = MagicMock(recommendations=recs)
     fake_diagrams: dict = {
         "generate_graph": False,
         "mermaid_code_per_file": {},
@@ -91,10 +90,9 @@ def _run_execute_with_recs(recs: list[Recommendation], context: RoleCommandConte
         patch(_PATCH_VALIDATE, return_value=fake_path),
         patch(_PATCH_PLAYBOOK, return_value=None),
         patch(_PATCH_BUILD, return_value=fake_role_info),
-        patch(_PATCH_COMPLEXITY, return_value=fake_analysis),
+        patch(_PATCH_ANALYZE, return_value=fake_analysis),
         patch(_PATCH_DIAGRAMS, return_value=fake_diagrams),
         patch(_PATCH_DEPS, return_value=fake_deps),
-        patch(_PATCH_RECS, return_value=recs),
         # Skip suppression machinery — just return recs unchanged
         patch(
             "docsible.suppression.engine.apply_suppressions",

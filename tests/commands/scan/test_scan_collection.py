@@ -7,8 +7,10 @@ side-effects occur outside of tmp_path fixtures.
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -23,7 +25,7 @@ MINIMAL_COLLECTION = FIXTURES / "minimal_collection"
 MULTI_ROLE_COLLECTION = FIXTURES / "multi_role_collection"
 
 
-def _invoke(*args: str) -> click.testing.Result:  # type: ignore[name-defined]
+def _invoke(*args: str) -> click.testing.Result:
     runner = CliRunner()
     return runner.invoke(cli, ["scan", "collection", *args], catch_exceptions=False)
 
@@ -206,3 +208,37 @@ class TestScanTopN:
         assert len(data["roles"]) <= 2, (
             f"Expected <=2 roles in JSON output, got {len(data['roles'])}"
         )
+
+
+class TestScanRecommendationParity:
+    """Regression test: `_analyse_role()` previously called
+    `generate_all_recommendations(role_path)` without the complexity report,
+    silently missing the graph-aware findings (e.g. collection dependencies)
+    that `document role` already produced. It must now use the same
+    `analyze_role()` pipeline as `document role` / `document role
+    --collection`.
+    """
+
+    def test_scan_surfaces_collection_dependency_recommendation(self, tmp_path):
+        collection = tmp_path / "collection"
+        shutil.copytree(MINIMAL_COLLECTION, collection)
+        meta_path = collection / "roles" / "web_role" / "meta" / "main.yml"
+        meta_path.write_text(
+            "galaxy_info:\n"
+            "  author: Test Author\n"
+            "  description: Web role for testing\n"
+            "  license: MIT\n"
+            "  min_ansible_version: '2.9'\n"
+            "dependencies: []\n"
+            "collections:\n"
+            "  - community.general\n"
+        )
+
+        result = _invoke(str(collection), "--output-format", "json")
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        role = next(r for r in data["roles"] if r["name"] == "web_role")
+        assert any(
+            "collections" in msg.lower() for msg in role["top_recommendations"]
+        ), role["top_recommendations"]
