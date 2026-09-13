@@ -64,7 +64,10 @@ class GraphDecisionRule(DecisionRule):
             )
 
         # 3. Complex role → highly recommend graphs
-        if context.is_complex_role or context.task_file_count > MAX_TASK_FILES_LOWER_BOUND:
+        if (
+            context.complexity_category in {"complex", "enterprise"}
+            or context.task_file_count > MAX_TASK_FILES_LOWER_BOUND
+        ):
             return Decision(
                 option_name="generate_graph",
                 value=True,

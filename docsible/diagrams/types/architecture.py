@@ -5,9 +5,14 @@ Generates Mermaid diagrams showing internal role structure and data flow.
 """
 
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_DETAILED_FILE_BUDGET = 20
+_DETAILED_EDGE_BUDGET = 35
+_DETAILED_FANOUT_BUDGET = 8
 
 
 def generate_component_architecture(
@@ -72,6 +77,8 @@ def generate_component_architecture(
 
     # Tasks subgraph with file breakdown
     task_files = role_info.get("tasks", [])
+    if execution_graph is not None and _should_group_execution_graph(execution_graph, task_files):
+        return _generate_grouped_architecture(role_info, execution_graph)
     if task_files:
         lines.append("    subgraph Tasks")
         for idx, task_file in enumerate(task_files):
@@ -219,6 +226,90 @@ def generate_component_architecture(
     return "\n".join(lines)
 
 
+def _should_group_execution_graph(execution_graph: Any, task_files: list[dict[str, Any]]) -> bool:
+    include_edges = [
+        edge
+        for edge in execution_graph.edges
+        if edge.kind.value in {"includes_task_file", "imports_task_file"}
+    ]
+    fanout: dict[str, int] = {}
+    for edge in include_edges:
+        fanout[edge.source_id] = fanout.get(edge.source_id, 0) + 1
+    return (
+        len(task_files) > _DETAILED_FILE_BUDGET
+        or len(include_edges) > _DETAILED_EDGE_BUDGET
+        or max(fanout.values(), default=0) > _DETAILED_FANOUT_BUDGET
+    )
+
+
+def _generate_grouped_architecture(role_info: dict[str, Any], execution_graph: Any) -> str:
+    """Render a bounded directory-level overview from graph facts."""
+    task_nodes = [node for node in execution_graph.nodes.values() if node.kind.value == "task_file"]
+    groups: dict[str, list[str]] = {}
+    for node in task_nodes:
+        file_name = node.metadata["file"]
+        group = "entry point" if file_name == "main.yml" else file_name.split("/", 1)[0]
+        groups.setdefault(group, []).append(file_name)
+
+    def node_id(group: str) -> str:
+        return "group_" + re.sub(r"[^A-Za-z0-9_]", "_", group)
+
+    file_group = {file_name: group for group, files in groups.items() for file_name in files}
+    lines = ["graph TB", '    overview["Grouped execution overview"]']
+    for group, files in sorted(groups.items()):
+        label = "main.yml" if group == "entry point" else f"{group}<br/>{len(files)} task files"
+        lines.append(f'    {node_id(group)}["{label}"]')
+        lines.append(f"    overview --> {node_id(group)}")
+
+    task_to_file = {
+        edge.target_id: edge.source_id
+        for edge in execution_graph.edges
+        if edge.kind.value == "contains" and edge.source_id.startswith("task_file:")
+    }
+    file_by_id = {node.id: node.metadata["file"] for node in task_nodes}
+    grouped_edges: dict[tuple[str, str], int] = {}
+    uncertain_sources: set[str] = set()
+    notify_sources: set[str] = set()
+    for edge in execution_graph.edges:
+        if edge.kind.value in {"includes_task_file", "imports_task_file"}:
+            source_file_id = task_to_file.get(edge.source_id)
+            source_file = file_by_id.get(source_file_id)
+            target_file = file_by_id.get(edge.target_id)
+            if source_file and target_file:
+                key = (file_group[source_file], file_group[target_file])
+                grouped_edges[key] = grouped_edges.get(key, 0) + 1
+            elif source_file and edge.resolution.value in {"dynamic", "unknown"}:
+                uncertain_sources.add(file_group[source_file])
+        elif edge.kind.value == "notifies_handler" and edge.target_id:
+            source_file_id = task_to_file.get(edge.source_id)
+            if source_file_id in file_by_id:
+                notify_sources.add(file_group[file_by_id[source_file_id]])
+
+    for (source, target), count in sorted(grouped_edges.items()):
+        if source != target:
+            label = "include" if count == 1 else f"{count} includes"
+            lines.append(f'    {node_id(source)} -."{label}".-> {node_id(target)}')
+    if uncertain_sources:
+        lines.append(f'    uncertain["Dynamic or unknown<br/>{len(uncertain_sources)} source groups"]')
+        for source in sorted(uncertain_sources):
+            lines.append(f'    {node_id(source)} -."dynamic".-> uncertain')
+    if notify_sources:
+        lines.append('    handlers["Handlers"]')
+        for source in sorted(notify_sources):
+            lines.append(f'    {node_id(source)} -."notify".-> handlers')
+    lines.extend(
+        [
+            "    classDef groupStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px",
+            "    classDef uncertaintyStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px",
+            "    class overview groupStyle",
+            "    class uncertain uncertaintyStyle" if uncertain_sources else "",
+        ]
+    )
+    for group in groups:
+        lines.append(f"    class {node_id(group)} groupStyle")
+    return "\n".join(line for line in lines if line)
+
+
 def should_generate_architecture_diagram(complexity_report: Any) -> bool:
     """
     Determine if a component architecture diagram should be generated.
@@ -239,7 +330,7 @@ def should_generate_architecture_diagram(complexity_report: Any) -> bool:
         return False
 
     # Generate for COMPLEX roles
-    if complexity_report.category.value == "complex":
+    if complexity_report.category.value in {"complex", "enterprise"}:
         return True
 
     # Generate for MEDIUM roles with high composition

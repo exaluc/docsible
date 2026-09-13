@@ -153,6 +153,7 @@ class RoleExecutionGraph:
 _TASK_FILE_ACTIONS = {"include", "include_tasks", "import_tasks"}
 _ROLE_ACTIONS = {"include_role", "import_role"}
 _VARIABLE_PATTERN = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\b")
+_ROLE_PATH_TASK_PREFIX = re.compile(r"^\{\{\s*role_path\s*\}\}/tasks/")
 
 
 def build_role_execution_graph(role_info: dict[str, Any]) -> RoleExecutionGraph:
@@ -271,7 +272,8 @@ def _add_composition_edge(graph: RoleExecutionGraph, task_id: str, task: dict[st
     if isinstance(raw_target, dict):
         raw_target = raw_target.get("file" if short_module in _TASK_FILE_ACTIONS else "name")
     target = str(raw_target) if raw_target is not None else ""
-    dynamic = "{{" in target or "{%" in target
+    resolved_target = _ROLE_PATH_TASK_PREFIX.sub("", target)
+    dynamic = "{{" in resolved_target or "{%" in resolved_target
     kind = EdgeKind.IMPORTS_TASK_FILE if short_module == "import_tasks" else EdgeKind.INCLUDES_TASK_FILE
     if short_module in _ROLE_ACTIONS:
         kind = EdgeKind.IMPORTS_ROLE if short_module == "import_role" else EdgeKind.INCLUDES_ROLE
@@ -280,7 +282,7 @@ def _add_composition_edge(graph: RoleExecutionGraph, task_id: str, task: dict[st
             graph.add_node(GraphNode(target_id, NodeKind.EXTERNAL_ROLE, target, metadata={"role": target}))
         resolution = ResolutionStatus.DYNAMIC if dynamic else ResolutionStatus.UNRESOLVED_EXTERNAL
     else:
-        target_id = _resolve_task_file(target, source_file, file_ids) if not dynamic else None
+        target_id = _resolve_task_file(resolved_target, source_file, file_ids) if not dynamic else None
         resolution = ResolutionStatus.DYNAMIC if dynamic else ResolutionStatus.STATIC if target_id else ResolutionStatus.UNKNOWN
     graph.add_edge(GraphEdge(kind, task_id, target_id, resolution, source, condition=_condition(task), loop=_loop(task), target_expression=target or None))
 

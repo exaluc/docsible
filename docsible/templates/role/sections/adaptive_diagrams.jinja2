@@ -47,7 +47,7 @@ This state diagram shows the role's execution phases and decision points:
 {% endif %}
 
 {# COMPLEX roles (25+ tasks): Use architecture + text documentation #}
-{% if complexity_report.category.value == 'complex' %}
+{% if complexity_report.category.value in ['complex', 'enterprise'] %}
 ## Architecture Overview
 <!-- DOCSIBLE GENERATED -->
 
@@ -93,7 +93,11 @@ This role integrates with {{ complexity_report.integration_points|length }} exte
 Static traversal from the role entry point. Conditional paths do not imply that
 all branches run in one execution; dynamic boundaries remain unresolved.
 
-{% for task_file_info in execution_phases or complexity_report.task_files_detail %}
+{% set route_files = execution_phases or complexity_report.task_files_detail %}
+{% if complexity_report.category.value == 'enterprise' %}
+{% set route_files = route_files | rejectattr('kind', 'equalto', 'unreachable') | list %}
+{% endif %}
+{% for task_file_info in route_files %}
 {% if loop.first %}#### Entry point: {{ task_file_info.file }}
 {% elif task_file_info.kind is defined and task_file_info.kind == 'conditional' %}#### Conditional path: {{ task_file_info.file }}
 {% elif task_file_info.kind is defined and task_file_info.kind == 'unreachable' %}#### Unreached static file: {{ task_file_info.file }}
@@ -105,6 +109,14 @@ Condition: `{{ task_file_info.conditions | join(' and ') }}`
 {% endif %}
 
 {% endfor %}
+{% if complexity_report.category.value == 'enterprise' and execution_phases %}
+{% set orphan_count = execution_phases | selectattr('kind', 'equalto', 'unreachable') | list | length %}
+{% if orphan_count %}
+#### Unreached static files: {{ orphan_count }}
+These files are not reached through statically resolvable boundaries from the entry point.
+
+{% endif %}
+{% endif %}
 
 ### Recommendations
 {% for recommendation in complexity_report.recommendations %}
