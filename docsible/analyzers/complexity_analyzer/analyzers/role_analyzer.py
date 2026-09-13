@@ -162,32 +162,30 @@ def analyze_role_complexity(
     role_dependencies = len(role_info.get("meta", {}).get("dependencies", []))
     collection_dependencies = len(role_info.get("meta", {}).get("collections", []))
 
-    # Count role includes (include_role, import_role)
-    role_includes = sum(
-        1
-        for tf in tasks_data
-        for task in tf.get("tasks", [])
-        if task.get("module", "")
-        in [
-            "include_role",
-            "import_role",
-            "ansible.builtin.include_role",
-            "ansible.builtin.import_role",
-        ]
-    )
+    # Build the execution graph once; it is the authoritative source for
+    # boundary counts and every graph-derived metric below. This replaces a
+    # second regex scan of the flattened tasks, which historically missed the
+    # legacy bare `include:` keyword. Count distinct *source* tasks (not edges)
+    # so one templated include that fans out to several candidate files is
+    # still counted as the single boundary statement it is.
+    from docsible.graphs import EdgeKind, NodeKind, ResolutionStatus, build_role_execution_graph
 
-    # Count task includes (include_tasks, import_tasks)
-    task_includes = sum(
-        1
-        for tf in tasks_data
-        for task in tf.get("tasks", [])
-        if task.get("module", "")
-        in [
-            "include_tasks",
-            "import_tasks",
-            "ansible.builtin.include_tasks",
-            "ansible.builtin.import_tasks",
-        ]
+    if execution_graph is None:
+        execution_graph = build_role_execution_graph(role_info)
+
+    task_includes = len(
+        {
+            edge.source_id
+            for edge in execution_graph.edges
+            if edge.kind in {EdgeKind.INCLUDES_TASK_FILE, EdgeKind.IMPORTS_TASK_FILE}
+        }
+    )
+    role_includes = len(
+        {
+            edge.source_id
+            for edge in execution_graph.edges
+            if edge.kind in {EdgeKind.INCLUDES_ROLE, EdgeKind.IMPORTS_ROLE}
+        }
     )
 
     # Calculate max and average tasks per file
@@ -207,11 +205,7 @@ def analyze_role_complexity(
     # Detect inflection points
     inflection_points = detect_inflection_points(role_info, hotspots)
 
-    # Create metrics
-    from docsible.graphs import EdgeKind, NodeKind, ResolutionStatus, build_role_execution_graph
-
-    if execution_graph is None:
-        execution_graph = build_role_execution_graph(role_info)
+    # Create metrics (execution_graph already built above; reuse it).
     phases = execution_graph.execution_phases()
     graph_metrics = {
         "static_reachable_task_files": sum(

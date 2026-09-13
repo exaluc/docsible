@@ -98,3 +98,32 @@ def test_analyze_max_and_avg_tasks():
     assert report.metrics.task_files == 3
     assert report.metrics.max_tasks_per_file == 15
     assert report.metrics.avg_tasks_per_file == 10.0  # (10+5+15)/3
+
+
+def test_task_includes_is_graph_authoritative_and_counts_legacy_include():
+    """Regression: boundary counts come from the RoleExecutionGraph, not a
+    separate flattened-task regex that missed the legacy bare `include:`
+    keyword (candidate 9 reported 0 despite 20 include boundaries)."""
+    role_info = {
+        "name": "legacy",
+        "defaults": [],
+        "vars": [],
+        "handlers": [],
+        "tasks": [
+            {
+                "file": "main.yml",
+                "tasks": [
+                    {"name": "inc", "module": "include", "type": "task", "when": None}
+                ],
+                "mermaid": [{"name": "inc", "include": "sub.yml"}],
+            },
+            {
+                "file": "sub.yml",
+                "tasks": [{"name": "d", "module": "debug", "type": "task", "when": None}],
+                "mermaid": [{"name": "d", "debug": {}}],
+            },
+        ],
+    }
+    metrics = analyze_role_complexity(role_info).metrics
+    assert metrics.task_includes == 1  # bare include: counted via the graph
+    assert metrics.role_includes == 0

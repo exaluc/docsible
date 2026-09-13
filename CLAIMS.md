@@ -233,6 +233,25 @@ interface is `build_role_execution_graph(role_info)`.
     file` vs `N task files`). This subsumes finding B (nested roles already
     give the bounded multi-level view); finding D stays deferred (see Next
     Graph Milestones).
+13. Scale performance of the graph path (found on candidate 8,
+    `UBUNTU22-CIS`): `_add_variable_edges` now tokenizes each serialized task
+    once (one identifier-regex pass + set membership) instead of a
+    per-variable `\b<name>\b` regex scan — graph build 12.7s → 0.3s, edge set
+    unchanged (1745 nodes / 2510 edges). The `RoleExecutionGraph` is also now
+    built once per command and threaded through `RoleAnalysis`,
+    `analyze_role_complexity(execution_graph=...)`, `render_analyzed_role`,
+    and `_generate_diagrams` (previously rebuilt 2–3×). CIS `analyze`
+    41s → 3s; `document --graph` 40s → 3s.
+14. The `RoleExecutionGraph` is the single authoritative counter for
+    include/import boundaries: `task_includes`/`role_includes` in the
+    complexity report are derived from distinct source tasks of the graph's
+    include edges, replacing a separate flattened-task regex that never
+    matched the legacy bare `include:` keyword. Fixes the candidate-9
+    contradiction (legacy `include:` role reported `Task Includes: 0` while
+    its own Execution Routes/diagram showed 20; now 20). Non-legacy roles are
+    unchanged (verified docker 5, mysql 9, nginx-official 21, os_hardening
+    22). Any future boundary count must read from the graph — not add a second
+    scan — to keep this single source of truth.
 
 ### Next Graph Milestones
 
