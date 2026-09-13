@@ -15,6 +15,7 @@ class JsonRecommendationFormatter:
         role_name: str = "",
         truncated: bool = False,
         total_count: int | None = None,
+        complexity_report=None,
     ) -> str:
         """Return JSON string of all recommendations."""
         severity_counts: Counter[str] = Counter(r.severity.value.lower() for r in recommendations)
@@ -44,4 +45,7 @@ class JsonRecommendationFormatter:
             },
             "truncated": truncated,
         }
+        if complexity_report is not None:
+            payload["complexity"] = complexity_report.metrics.model_dump(mode="json")
+            payload["execution_graph"] = complexity_report.execution_graph
         return json.dumps(payload, indent=2)

@@ -60,6 +60,7 @@ class ComplexityMetrics(BaseModel):
 
     # Internal composition (role orchestration)
     role_dependencies: int = Field(default=0, description="Role dependencies from meta/main.yml")
+    collection_dependencies: int = Field(default=0, description="Collection dependencies from meta/main.yml")
     role_includes: int = Field(default=0, description="include_role/import_role count")
     task_includes: int = Field(default=0, description="include_tasks/import_tasks count")
 
@@ -71,6 +72,7 @@ class ComplexityMetrics(BaseModel):
     loop_tasks: int = Field(default=0)
     notification_edges: int = Field(default=0)
     orphan_task_files: int = Field(default=0)
+    conditional_decision_points: int = Field(default=0)
 
     # External integrations
     external_integrations: int = Field(
@@ -138,6 +140,7 @@ class ComplexityReport(BaseModel):
     integration_points: list[IntegrationPoint] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     task_files_detail: list[dict[str, Any]] = Field(default_factory=list)
+    execution_graph: dict[str, Any] = Field(default_factory=dict)
 
     # Pattern analysis (optional)
     pattern_analysis: Any | None = Field(

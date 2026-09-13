@@ -156,6 +156,7 @@ def analyze_role_complexity(
 
     # Count role dependencies (from meta/main.yml)
     role_dependencies = len(role_info.get("meta", {}).get("dependencies", []))
+    collection_dependencies = len(role_info.get("meta", {}).get("collections", []))
 
     # Count role includes (include_role, import_role)
     role_includes = sum(
@@ -233,6 +234,10 @@ def analyze_role_complexity(
             for edge in execution_graph.edges
         ),
         "orphan_task_files": sum(phase["kind"] == "unreachable" for phase in phases),
+        "conditional_decision_points": sum(
+            node.kind is NodeKind.TASK and "condition" in node.metadata
+            for node in execution_graph.nodes.values()
+        ),
     }
     metrics = ComplexityMetrics(
         total_tasks=total_tasks,
@@ -241,6 +246,7 @@ def analyze_role_complexity(
         conditional_tasks=conditional_tasks,
         error_handlers=error_handlers,
         role_dependencies=role_dependencies,
+        collection_dependencies=collection_dependencies,
         role_includes=role_includes,
         task_includes=task_includes,
         external_integrations=len(integration_points),
@@ -306,6 +312,7 @@ def analyze_role_complexity(
         integration_points=integration_points,
         recommendations=recommendations,
         task_files_detail=task_files_detail,
+        execution_graph=execution_graph.to_dict(),
         pattern_analysis=pattern_report,
     )
 

@@ -234,6 +234,8 @@ def _add_tasks(graph: RoleExecutionGraph, role_name: str, task_file: dict[str, A
         source = SourceLocation(f"tasks/{file_name}", line)
         task_id = f"task:{role_name}:{file_name}:{'.'.join(map(str, index))}"
         metadata = {"file": file_name, "module": _module_name(task)}
+        if condition := _condition(task):
+            metadata["condition"] = condition
         if loop := _loop(task):
             metadata["loop"] = loop
         graph.add_node(GraphNode(task_id, NodeKind.TASK, str(task.get("name", "Unnamed")), source, metadata))

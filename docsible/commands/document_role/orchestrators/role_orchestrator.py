@@ -103,7 +103,7 @@ class RoleOrchestrator:
             suppressed = []
 
         if recommendations or self.context.analysis.output_format == "json":
-            self._display_recommendations(recommendations)
+            self._display_recommendations(recommendations, analysis_report)
 
         # Recommendation strictness applies to documentation generation only.
         # Validate intent reserves strictness for markdown validation below.
@@ -365,7 +365,7 @@ class RoleOrchestrator:
 
         click.echo(summary)
 
-    def _display_recommendations(self, recommendations: list[Recommendation]) -> None:
+    def _display_recommendations(self, recommendations: list[Recommendation], analysis_report=None) -> None:
         """Display recommendations to user"""
         all_recs = recommendations
 
@@ -382,6 +382,7 @@ class RoleOrchestrator:
                 role_name=role_name,
                 truncated=False,
                 total_count=len(all_recs),
+                complexity_report=analysis_report,
             )
             click.echo(json_output)
             return
