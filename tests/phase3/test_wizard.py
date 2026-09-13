@@ -101,7 +101,7 @@ class TestWizardInitForce:
     def test_no_force_existing_config_aborts_on_no(self, tmp_path):
         runner = CliRunner()
         runner.invoke(wizard_init, ["--preset", "personal", "--path", str(tmp_path)])
-        result = runner.invoke(
+        runner.invoke(
             wizard_init,
             ["--preset", "team", "--path", str(tmp_path)],
             input="n\n",

@@ -47,7 +47,7 @@ This state diagram shows the role's execution phases and decision points:
 {% endif %}
 
 {# COMPLEX roles (25+ tasks): Use architecture + text documentation #}
-{% if complexity_report.category.value == 'complex' %}
+{% if complexity_report.category.value in ['complex', 'enterprise'] %}
 ## Architecture Overview
 <!-- DOCSIBLE GENERATED -->
 
@@ -60,6 +60,16 @@ This role contains **{{ complexity_report.metrics.total_tasks }} tasks** across 
 - Handlers: {{ complexity_report.metrics.handlers }}
 - Task Includes: {{ complexity_report.metrics.task_includes }}
 - Role Dependencies: {{ complexity_report.metrics.role_dependencies }}
+
+### Execution Graph Summary
+- Collection dependencies: {{ complexity_report.metrics.collection_dependencies }}
+- Conditional decision points: {{ complexity_report.metrics.conditional_decision_points }}
+- Statically reachable task files: {{ complexity_report.metrics.static_reachable_task_files }}
+- Dynamic boundaries: {{ complexity_report.metrics.dynamic_boundaries }}
+- Unknown boundaries: {{ complexity_report.metrics.unknown_boundaries }}
+- Handler notification edges: {{ complexity_report.metrics.notification_edges }}
+- Loop-bearing tasks: {{ complexity_report.metrics.loop_tasks }}
+- Orphan task files: {{ complexity_report.metrics.orphan_task_files }}
 
 {% if architecture_diagram %}
 ### Component Architecture
@@ -88,24 +98,46 @@ This role integrates with {{ complexity_report.integration_points|length }} exte
 {% endfor %}
 {% endif %}
 
-### Execution Phases
-<!-- MANUALLY MAINTAINED - Update as role evolves -->
+### Execution Routes
 
-Due to complexity, this role is best understood through its execution phases:
+Static traversal from the role entry point. Conditional paths do not imply that
+all branches run in one execution; dynamic boundaries remain unresolved.
 
-{% for task_file_info in complexity_report.task_files_detail %}
-#### Phase {{ loop.index }}: {{ task_file_info.file }}
-**Tasks:** {{ task_file_info.task_count }}
-
-> **Note:** Document decision points, error handling, and key operations for this phase
->
-> Example structure:
-> - **Purpose:** What this phase accomplishes
-> - **Prerequisites:** What must be true before this phase
-> - **Decision Points:** Key conditional logic
-> - **Error Handling:** How failures are managed
+{% set route_files = execution_phases or complexity_report.task_files_detail %}
+{% if complexity_report.category.value == 'enterprise' %}
+{% set route_files = route_files | rejectattr('kind', 'equalto', 'unreachable') | list %}
+{% set route_files = route_files | rejectattr('kind', 'equalto', 'dynamic') | list %}
+{% endif %}
+{% for task_file_info in route_files %}
+{% if loop.first %}#### Entry point: {{ task_file_info.file }}
+{% elif task_file_info.kind is defined and task_file_info.kind == 'dynamic' %}#### Dynamic path candidate: {{ task_file_info.file }}
+{% elif task_file_info.kind is defined and task_file_info.kind == 'conditional' %}#### Conditional path: {{ task_file_info.file }}
+{% elif task_file_info.kind is defined and task_file_info.kind == 'unreachable' %}#### Unreached static file: {{ task_file_info.file }}
+{% else %}#### Static continuation: {{ task_file_info.file }}
+{% endif %}
+Tasks: {{ task_file_info.task_count }}
+{% if task_file_info.kind is defined and task_file_info.kind == 'conditional' %}
+Condition: `{{ task_file_info.conditions | join(' and ') }}`
+{% endif %}
+{% if task_file_info.kind is defined and task_file_info.kind == 'dynamic' %}
+Dynamic boundary: `{{ task_file_info.expressions | join(' or ') }}`
+{% endif %}
 
 {% endfor %}
+{% if complexity_report.category.value == 'enterprise' and execution_phases %}
+{% set dynamic_count = execution_phases | selectattr('kind', 'equalto', 'dynamic') | list | length %}
+{% if dynamic_count %}
+#### Dynamic path candidates: {{ dynamic_count }}
+Candidate files match templated boundaries. See the grouped execution overview for their source groups.
+
+{% endif %}
+{% set orphan_count = execution_phases | selectattr('kind', 'equalto', 'unreachable') | list | length %}
+{% if orphan_count %}
+#### Unreached static files: {{ orphan_count }}
+These files are not reached through statically resolvable boundaries from the entry point.
+
+{% endif %}
+{% endif %}
 
 ### Recommendations
 {% for recommendation in complexity_report.recommendations %}

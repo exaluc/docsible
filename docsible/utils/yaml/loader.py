@@ -19,6 +19,23 @@ from .parser import get_multiline_indicator
 logger = logging.getLogger(__name__)
 
 
+class DocsibleSafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that preserves Ansible's scalar !unsafe values."""
+
+
+def _construct_unsafe(loader: yaml.SafeLoader, node: yaml.Node) -> Any:
+    if isinstance(node, yaml.ScalarNode):
+        return loader.construct_scalar(node)
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    return loader.construct_object(node)
+
+
+DocsibleSafeLoader.add_constructor("!unsafe", _construct_unsafe)
+
+
 @cache_by_file_mtime
 def load_yaml_generic(filepath: str | Path) -> dict[str, Any] | None:
     """Load YAML file and return parsed data.
@@ -36,7 +53,7 @@ def load_yaml_generic(filepath: str | Path) -> dict[str, Any] | None:
     """
     try:
         with open(filepath, encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+            data = yaml.load(f, Loader=DocsibleSafeLoader)
         return cast(dict[str, Any] | None, data)
     except (FileNotFoundError, yaml.YAMLError, OSError) as e:
         logger.error(f"Error loading {filepath}: {e}")
@@ -132,7 +149,7 @@ def _read_and_parse_yaml(file_path: str) -> tuple[list[str], dict[str, Any] | No
         lines = file.readlines()
 
     with open(file_path, encoding="utf-8") as file:
-        data = yaml.safe_load(file)
+        data = yaml.load(file, Loader=DocsibleSafeLoader)
 
     return lines, data
 
@@ -356,7 +373,9 @@ def _format_value_for_display(value: Any, multiline_indicator: str | None) -> An
         Formatted value
     """
     if multiline_indicator:
-        return f"<multiline value: {multiline_indicator}>"
+        # Markdown table cells cannot preserve YAML block formatting. Keep the
+        # source value readable rather than replacing it with a placeholder.
+        return " ".join(value.split()) if isinstance(value, str) else value
     elif isinstance(value, list):
         return []
     elif isinstance(value, dict):

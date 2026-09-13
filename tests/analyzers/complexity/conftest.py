@@ -140,6 +140,15 @@ def complex_role_info():
                     {"name": "Another task", "module": "copy"},
                     {"name": "Final task", "module": "template"},
                 ],
+                "mermaid": [
+                    {"name": "Include common tasks", "include_tasks": "common.yml"},
+                    {"name": "Import role", "import_role": {"name": "base"}},
+                    {"name": "Include another role", "ansible.builtin.include_role": {"name": "utils"}},
+                    {"name": "Import more tasks", "ansible.builtin.import_tasks": "cleanup.yml"},
+                    {"name": "Regular task", "debug": {}},
+                    {"name": "Another task", "copy": {}},
+                    {"name": "Final task", "template": {}},
+                ],
             },
         ],
         "handlers": [

@@ -1,0 +1,29 @@
+{# Collection-wide complexity overview: aggregate facts (not a synthesized
+   score, since a collection has no single execution graph the way one role
+   does) plus a per-role index sorted by complexity, so a reader can see at
+   a glance which roles need the most attention before opening any of them
+   individually. #}
+{% from 'collection/macros/repo_links.jinja2' import render_repo_role_readme_link %}
+{% if roles and roles[0].complexity_category is defined %}
+{% set sorted_roles = roles|sort(attribute='name')|sort(attribute='complexity_rank', reverse=true) %}
+## Complexity Overview
+
+This collection contains **{{ roles|length }} roles** and **{{ roles|sum(attribute='complexity_task_count') }} tasks** in total.
+
+| Category | Roles |
+|----------|-------|
+| 🔴 Enterprise | {{ roles|selectattr('complexity_category', 'equalto', 'enterprise')|list|length }} |
+| 🟠 Complex | {{ roles|selectattr('complexity_category', 'equalto', 'complex')|list|length }} |
+| 🟡 Medium | {{ roles|selectattr('complexity_category', 'equalto', 'medium')|list|length }} |
+| 🟢 Simple | {{ roles|selectattr('complexity_category', 'equalto', 'simple')|list|length }} |
+
+### Role Index
+
+Sorted by complexity, most involved first.
+
+| Role | Complexity | Tasks | Critical | Warning | Top Finding |
+|------|-----------|-------|----------|---------|-------------|
+{% for role in sorted_roles -%}
+| [{{ role.name }}]({{ render_repo_role_readme_link(collection.repository, role.name, collection.repository_type, collection.repository_branch) }}) | {{ role.complexity_badge }} | {{ role.complexity_task_count }} | {{ role.complexity_critical_count }} | {{ role.complexity_warning_count }} | {{ role.complexity_top_finding | escape_table_cell if role.complexity_top_finding else '—' }} |
+{% endfor %}
+{% endif %}

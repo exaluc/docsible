@@ -5,13 +5,23 @@ Generates Mermaid diagrams showing internal role structure and data flow.
 """
 
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_DETAILED_FILE_BUDGET = 20
+_DETAILED_EDGE_BUDGET = 35
+_DETAILED_FANOUT_BUDGET = 8
+# Hard cap on visible group nodes in the grouped overview, so a flat tasks/
+# directory (where each file is its own pseudo-group) cannot produce a wall of
+# near-identical single-file nodes. Kept above real nested layouts (e.g. the
+# official nginx role's 9 directories) so those render unchanged.
+_MAX_GROUP_NODES = 10
+
 
 def generate_component_architecture(
-    role_info: dict[str, Any] | None, complexity_report: Any
+    role_info: dict[str, Any] | None, complexity_report: Any, execution_graph: Any | None = None
 ) -> str | None:
     """
     Generate component architecture diagram for complex roles.
@@ -72,6 +82,8 @@ def generate_component_architecture(
 
     # Tasks subgraph with file breakdown
     task_files = role_info.get("tasks", [])
+    if execution_graph is not None and _should_group_execution_graph(execution_graph, task_files):
+        return _generate_grouped_architecture(role_info, execution_graph)
     if task_files:
         lines.append("    subgraph Tasks")
         for idx, task_file in enumerate(task_files):
@@ -104,8 +116,22 @@ def generate_component_architecture(
     # Data flow connections
     lines.append("    %% Data Flow")
 
-    # Variables flow to tasks
-    if has_variables and task_files:
+    # Variables flow only to files with source-backed variable references.
+    if execution_graph is not None:
+        variable_edges: set[tuple[str, str]] = set()
+        for edge in execution_graph.edges:
+            if edge.kind.value != "uses_variable" or edge.target_id is None:
+                continue
+            task = execution_graph.nodes.get(edge.source_id)
+            variable = execution_graph.nodes.get(edge.target_id)
+            if not task or not variable:
+                continue
+            variable_node = "defaults" if variable.metadata.get("scope") == "defaults" else "vars"
+            task_id = f"tasks_{task.metadata['file'].replace('.', '_').replace('/', '_')}"
+            variable_edges.add((variable_node, task_id))
+        for variable_node, task_id in sorted(variable_edges):
+            lines.append(f"    {variable_node} --> {task_id}")
+    elif has_variables and task_files:
         first_task_id = (
             f"tasks_{task_files[0].get('file', 'file0').replace('.', '_').replace('/', '_')}"
         )
@@ -114,14 +140,50 @@ def generate_component_architecture(
         if vars_count > 0:
             lines.append(f"    vars --> {first_task_id}")
 
-    # Task file sequential flow (simplified - show first -> last)
-    if len(task_files) > 1:
-        first_id = f"tasks_{task_files[0].get('file', 'file0').replace('.', '_').replace('/', '_')}"
-        last_id = f"tasks_{task_files[-1].get('file', 'fileN').replace('.', '_').replace('/', '_')}"
-        lines.append(f"    {first_id} --> {last_id}")
+    # Include/import flow between task files (statically resolvable targets only;
+    # templated targets are dynamic and are deliberately not drawn as edges)
+    task_file_ids = {
+        task_file.get("file", f"file{idx}"): (
+            f"tasks_{task_file.get('file', f'file{idx}').replace('.', '_').replace('/', '_')}"
+        )
+        for idx, task_file in enumerate(task_files)
+    }
+    task_file_ids_by_basename: dict[str, str] = {}
+    for file_name, node_id in task_file_ids.items():
+        task_file_ids_by_basename.setdefault(file_name.split("/")[-1], node_id)
+    added_include_edges: set[tuple[str, str]] = set()
+    for task_file in task_files:
+        file_name = task_file.get("file", "")
+        source_id = task_file_ids.get(file_name)
+        if not source_id:
+            continue
+        for task in task_file.get("tasks", []):
+            target = task.get("include_target")
+            if not target or "{{" in target:
+                continue
+            target_id = task_file_ids.get(target) or task_file_ids_by_basename.get(
+                target.split("/")[-1]
+            )
+            if (
+                target_id
+                and target_id != source_id
+                and (source_id, target_id) not in added_include_edges
+            ):
+                lines.append(f'    {source_id} -."includes".-> {target_id}')
+                added_include_edges.add((source_id, target_id))
 
-    # Tasks to handlers (notification)
-    if task_files and handlers_count > 0:
+    # Tasks to handlers use source-backed notify relationships when available.
+    if execution_graph is not None:
+        notifying_files: set[str] = set()
+        for edge in execution_graph.edges:
+            if edge.kind.value == "notifies_handler" and edge.target_id:
+                task = execution_graph.nodes.get(edge.source_id)
+                if task:
+                    notifying_files.add(task.metadata["file"])
+        for file_name in sorted(notifying_files):
+            task_id = f"tasks_{file_name.replace('.', '_').replace('/', '_')}"
+            lines.append(f'    {task_id} -."notify".-> handlers')
+    elif task_files and handlers_count > 0:
         last_task_id = (
             f"tasks_{task_files[-1].get('file', 'fileN').replace('.', '_').replace('/', '_')}"
         )
@@ -169,6 +231,116 @@ def generate_component_architecture(
     return "\n".join(lines)
 
 
+def _should_group_execution_graph(execution_graph: Any, task_files: list[dict[str, Any]]) -> bool:
+    include_edges = [
+        edge
+        for edge in execution_graph.edges
+        if edge.kind.value in {"includes_task_file", "imports_task_file"}
+    ]
+    fanout: dict[str, int] = {}
+    for edge in include_edges:
+        fanout[edge.source_id] = fanout.get(edge.source_id, 0) + 1
+    return (
+        len(task_files) > _DETAILED_FILE_BUDGET
+        or len(include_edges) > _DETAILED_EDGE_BUDGET
+        or max(fanout.values(), default=0) > _DETAILED_FANOUT_BUDGET
+    )
+
+
+def _generate_grouped_architecture(role_info: dict[str, Any], execution_graph: Any) -> str:
+    """Render a bounded directory-level overview from graph facts."""
+    task_nodes = [node for node in execution_graph.nodes.values() if node.kind.value == "task_file"]
+    file_task_count = {
+        node.metadata["file"]: node.metadata.get("task_count", 0) for node in task_nodes
+    }
+
+    groups: dict[str, list[str]] = {}
+    for file_name in file_task_count:
+        group = "entry point" if file_name == "main.yml" else file_name.split("/", 1)[0]
+        groups.setdefault(group, []).append(file_name)
+
+    # Bound the overview: keep the entry point and the largest groups by task
+    # count, and fold everything else into a single ``other`` bucket. This only
+    # engages when grouping fails to compress (flat directories), leaving nested
+    # layouts like the official nginx role untouched.
+    if len(groups) > _MAX_GROUP_NODES:
+        ranked = sorted(
+            (group for group in groups if group != "entry point"),
+            key=lambda group: sum(file_task_count[file] for file in groups[group]),
+            reverse=True,
+        )
+        keep = {"entry point", *ranked[: _MAX_GROUP_NODES - 1]}
+        other_files = [
+            file_name for group, files in groups.items() if group not in keep for file_name in files
+        ]
+        groups = {group: files for group, files in groups.items() if group in keep}
+        if other_files:
+            groups["other"] = sorted(other_files)
+
+    def node_id(group: str) -> str:
+        return "group_" + re.sub(r"[^A-Za-z0-9_]", "_", group)
+
+    def group_label(group: str, files: list[str]) -> str:
+        if group == "entry point":
+            return "main.yml"
+        noun = "task file" if len(files) == 1 else "task files"
+        return f"{group}<br/>{len(files)} {noun}"
+
+    file_group = {file_name: group for group, files in groups.items() for file_name in files}
+    lines = ["graph TB", '    overview["Grouped execution overview"]']
+    for group, files in sorted(groups.items()):
+        lines.append(f'    {node_id(group)}["{group_label(group, files)}"]')
+        lines.append(f"    overview --> {node_id(group)}")
+
+    task_to_file = {
+        edge.target_id: edge.source_id
+        for edge in execution_graph.edges
+        if edge.kind.value == "contains" and edge.source_id.startswith("task_file:")
+    }
+    file_by_id = {node.id: node.metadata["file"] for node in task_nodes}
+    grouped_edges: dict[tuple[str, str], int] = {}
+    uncertain_sources: set[str] = set()
+    notify_sources: set[str] = set()
+    for edge in execution_graph.edges:
+        if edge.kind.value in {"includes_task_file", "imports_task_file"}:
+            source_file_id = task_to_file.get(edge.source_id)
+            source_file = file_by_id.get(source_file_id)
+            target_file = file_by_id.get(edge.target_id)
+            if source_file and target_file:
+                key = (file_group[source_file], file_group[target_file])
+                grouped_edges[key] = grouped_edges.get(key, 0) + 1
+            if source_file and edge.resolution.value in {"dynamic", "unknown"}:
+                uncertain_sources.add(file_group[source_file])
+        elif edge.kind.value == "notifies_handler" and edge.target_id:
+            source_file_id = task_to_file.get(edge.source_id)
+            if source_file_id in file_by_id:
+                notify_sources.add(file_group[file_by_id[source_file_id]])
+
+    for (source, target), count in sorted(grouped_edges.items()):
+        if source != target:
+            label = "include" if count == 1 else f"{count} includes"
+            lines.append(f'    {node_id(source)} -."{label}".-> {node_id(target)}')
+    if uncertain_sources:
+        lines.append(f'    uncertain["Dynamic or unknown<br/>{len(uncertain_sources)} source groups"]')
+        for source in sorted(uncertain_sources):
+            lines.append(f'    {node_id(source)} -."dynamic".-> uncertain')
+    if notify_sources:
+        lines.append('    handlers["Handlers"]')
+        for source in sorted(notify_sources):
+            lines.append(f'    {node_id(source)} -."notify".-> handlers')
+    lines.extend(
+        [
+            "    classDef groupStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px",
+            "    classDef uncertaintyStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px",
+            "    class overview groupStyle",
+            "    class uncertain uncertaintyStyle" if uncertain_sources else "",
+        ]
+    )
+    for group in groups:
+        lines.append(f"    class {node_id(group)} groupStyle")
+    return "\n".join(line for line in lines if line)
+
+
 def should_generate_architecture_diagram(complexity_report: Any) -> bool:
     """
     Determine if a component architecture diagram should be generated.
@@ -189,7 +361,7 @@ def should_generate_architecture_diagram(complexity_report: Any) -> bool:
         return False
 
     # Generate for COMPLEX roles
-    if complexity_report.category.value == "complex":
+    if complexity_report.category.value in {"complex", "enterprise"}:
         return True
 
     # Generate for MEDIUM roles with high composition

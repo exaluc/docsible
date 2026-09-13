@@ -20,11 +20,7 @@
 
 {% macro render_repo_link(repo, role_name, file_path, line, repo_type, branch) -%}
   {%- if repo and file_path and line is not none -%}
-    {%- if role.belongs_to_collection -%}
-      {%- set full_path = 'roles/' ~ role_name ~ '/' ~ file_path -%}
-    {%- else -%}
-      {%- set full_path = file_path -%}
-    {%- endif %}
+    {%- set full_path = 'roles/' ~ role_name ~ '/' ~ file_path -%}
     {%- set encoded_path = full_path | replace(' ', '%20') -%}
     {%- if repo_type == 'github' -%}
       {{ repo }}/blob/{{ branch }}/{{ encoded_path }}#L{{ line }}
@@ -40,41 +36,41 @@
   {%- endif %}
 {%- endmacro %}
 
-{% macro render_arguments_list(arguments, level=0) %}
-{% for arg, details in arguments.items() %}
-  {%- set indent = '  ' * level %}
-  {{ indent }}- **{{ arg }}**
-  {{ indent }}  - **Required**: {{ details.required | default('false') }}
-  {{ indent }}  - **Type**: {{ details.type }}
-  {{ indent }}  - **Default**: {{ details.default | default('none') }}
-  {% if details.description is iterable and (details.description is not string and details.description is not mapping) -%}
-  {{ indent }}  - **Description**:
-  {% for details_desc in details.description -%}
-      {{ indent }} - {{ details_desc }}
-  {% endfor %}
-  {% else %}
-  {{ indent }}  - **Description**: {{ details.description | default('No description provided') }}
-  {% endif %}
-  {% if details.choices is defined %}
-    {{ indent }}  - **Choices**:
-    {% for choice in details.choices %}
-      {{ indent }}    - {{ choice }}
-    {% endfor %}
-  {% endif %}
-  {% if details.aliases is defined %}
-    {{ indent }}  - **Aliases**:
-    {% for alias in details.aliases %}
-      {{ indent }}    - {{ alias }}
-    {% endfor %}
-  {% endif %}
-  {% if details.type == 'dict' and details.options %}
-    {{ render_arguments_list(details.options, level + 1) }}
-  {% elif details.type == 'list' and details.elements == 'dict' %}
-    {% for elem in details.default %}
-      {% if elem is mapping %}
-        {{ render_arguments_list(elem, level + 1) }}
-      {% endif %}
-    {% endfor %}
-  {% endif %}
-{% endfor %}
+{% macro render_arguments_list(arguments, level=0) -%}
+{%- set indent = '  ' * level -%}
+{%- for arg, details in arguments.items() %}
+{{ indent }}- **{{ arg }}**
+{{ indent }}  - **Required**: {{ details.required | default('false') }}
+{{ indent }}  - **Type**: {{ details.type }}
+{{ indent }}  - **Default**: {{ details.default | default('none') }}
+{%- if details.description is iterable and (details.description is not string and details.description is not mapping) %}
+{{ indent }}  - **Description**:
+{%- for details_desc in details.description %}
+{{ indent }}    - {{ details_desc }}
+{%- endfor %}
+{%- else %}
+{{ indent }}  - **Description**: {{ details.description | default('No description provided') }}
+{%- endif %}
+{%- if details.choices is defined %}
+{{ indent }}  - **Choices**:
+{%- for choice in details.choices %}
+{{ indent }}    - {{ choice }}
+{%- endfor %}
+{%- endif %}
+{%- if details.aliases is defined %}
+{{ indent }}  - **Aliases**:
+{%- for alias in details.aliases %}
+{{ indent }}    - {{ alias }}
+{%- endfor %}
+{%- endif %}
+{%- if details.type == 'dict' and details.options %}
+{{ render_arguments_list(details.options, level + 1) }}
+{%- elif details.type == 'list' and details.elements == 'dict' %}
+{%- for elem in details.default %}
+{%- if elem is mapping %}
+{{ render_arguments_list(elem, level + 1) }}
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+{% endfor -%}
 {% endmacro %}

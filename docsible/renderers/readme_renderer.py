@@ -74,6 +74,7 @@ class ReadmeRenderer:
         state_diagram: str | None = None,
         integration_boundary_diagram: str | None = None,
         architecture_diagram: str | None = None,
+        execution_phases: list[dict[str, Any]] | None = None,
         complexity_report: Any | None = None,
         include_complexity: bool | None = None,
         dependency_matrix: str | None = None,
@@ -126,6 +127,7 @@ class ReadmeRenderer:
             state_diagram=state_diagram,
             integration_boundary_diagram=integration_boundary_diagram,
             architecture_diagram=architecture_diagram,
+            execution_phases=execution_phases,
             complexity_report=complexity_report,
             include_complexity=include_complexity,
             dependency_matrix=dependency_matrix,
@@ -267,8 +269,11 @@ class ReadmeRenderer:
         # Step 4: Add Docsible tags
         new_content = self.tag_processor.add_tags(new_content)
 
-        # Step 5: Merge with existing content
+        # Step 5: Normalize excessive blank lines (same as role READMEs)
+        new_content = self.markdown_processor.process(new_content)
+
+        # Step 6: Merge with existing content
         final_content = self.content_merger.merge(output_path, new_content, append)
 
-        # Step 6: Write file
+        # Step 7: Write file
         self.file_writer.write(output_path, final_content)

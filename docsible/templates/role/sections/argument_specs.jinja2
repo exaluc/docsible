@@ -1,0 +1,14 @@
+{% if role.argument_specs and role.argument_specs.argument_specs %}
+### Argument Specifications
+{% for spec_name, spec_data in role.argument_specs.argument_specs.items() %}
+#### {{ spec_name }}
+{% if spec_data.short_description %}{{ spec_data.short_description }}{% endif %}
+{% if spec_data.options %}
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+{% for option_name, option_data in spec_data.options.items() -%}
+| `{{ option_name | escape_table_cell }}` | {{ option_data.type | default('str') | escape_table_cell }} | {{ 'Yes' if option_data.required else 'No' }} | {{ option_data.default | escape_table_value if option_data.default is defined else '-' }} | {{ option_data.description | escape_table_cell | default('') }} |
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}

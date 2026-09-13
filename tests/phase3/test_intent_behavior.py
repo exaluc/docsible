@@ -50,7 +50,7 @@ def test_analyze_outputs_json_and_does_not_write_role_files(tmp_path):
     runner = CliRunner()
 
     with patch(
-        "docsible.commands.document_role.orchestrators.role_orchestrator.generate_all_recommendations",
+        "docsible.commands.document_role.role_analysis.generate_all_recommendations",
         return_value=[_recommendation()],
     ):
         result = runner.invoke(
@@ -70,7 +70,7 @@ def test_analyze_json_keeps_suppression_notice_off_stdout(tmp_path):
     runner = CliRunner()
 
     with patch(
-        "docsible.commands.document_role.orchestrators.role_orchestrator.generate_all_recommendations",
+        "docsible.commands.document_role.role_analysis.generate_all_recommendations",
         return_value=[_recommendation()],
     ), patch(
         "docsible.suppression.engine.apply_suppressions",
@@ -87,7 +87,7 @@ def test_analyze_json_outputs_empty_findings_when_all_are_suppressed(tmp_path):
     runner = CliRunner()
 
     with patch(
-        "docsible.commands.document_role.orchestrators.role_orchestrator.generate_all_recommendations",
+        "docsible.commands.document_role.role_analysis.generate_all_recommendations",
         return_value=[_recommendation()],
     ), patch(
         "docsible.suppression.engine.apply_suppressions",
@@ -111,7 +111,7 @@ def test_validate_is_read_only_and_strict_uses_markdown_issues(tmp_path):
     )
 
     with patch("docsible.validation.markdown_validator.MarkdownValidator.validate", return_value=[issue]), patch(
-        "docsible.commands.document_role.orchestrators.role_orchestrator.generate_all_recommendations",
+        "docsible.commands.document_role.role_analysis.generate_all_recommendations",
         return_value=[_recommendation()],
     ):
         result = runner.invoke(

@@ -2,31 +2,29 @@
 {% from 'collection/macros/repo_links.jinja2' import render_repo_role_readme_link, render_repo_link, render_arguments_list %}
 
 ## Roles
-{% for role in roles|sort(attribute='name') %}
+{% for role in roles|sort(attribute='name') -%}
 ### [{{ role.name }}]({{ render_repo_role_readme_link(collection.repository, role.name, collection.repository_type, collection.repository_branch) }})
 {% endfor %}
-
 ## Roles vars
-{% for role in roles|sort(attribute='name') %}
+{% for role in roles|sort(attribute='name') -%}
 # [{{ role.name }}]({{ render_repo_role_readme_link(collection.repository, role.name, collection.repository_type, collection.repository_branch) }})
 {% if role.meta and role.meta.galaxy_info -%}
 ## {{ role.name }} Description:
 {{ role.meta.galaxy_info.description or 'Not available.' }}
-{% else %}
+{%- else %}
 Description: Not available.
 {%- endif %}
 
-{% if not no_vars %}
-{% if role.argument_specs %}
+{% if not no_vars -%}
+{% if role.argument_specs -%}
 <details>
-<summary><b>> {{ role.name }} Argument Specifications in meta/argument_specs</b></summary>
-{% for section, specs in role.argument_specs.argument_specs.items() %}
+<summary><b>&gt; {{ role.name }} Argument Specifications in meta/argument_specs</b></summary>
+{% for section, specs in role.argument_specs.argument_specs.items() -%}
 #### Key: {{ section }}
 **Description**: {{ specs.description or specs.short_description or 'No description provided' }}
 {{ render_arguments_list(specs.options) }}
 {% endfor %}
 </details>
-{% else %}
 {% endif %}
 
 {% if role.defaults|length > 0 -%}
@@ -116,5 +114,5 @@ Description: Not available.
 {%- endfor %}
 {%- else %}
 {%- endif %}
-{% endif %}
-{% endfor %}
+{%- endif %}
+{% endfor -%}

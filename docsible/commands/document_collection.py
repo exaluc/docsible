@@ -1,11 +1,12 @@
 """Command for documenting Ansible collections."""
 
 import logging
-import os
 from pathlib import Path
 
+import click
 import yaml
 
+from docsible.commands.document_role.role_analysis import analyze_role, render_analyzed_role
 from docsible.commands.role_info_loader import RoleInfoLoader
 from docsible.exceptions import CollectionNotFoundError
 from docsible.renderers.readme_renderer import ReadmeRenderer
@@ -13,6 +14,33 @@ from docsible.utils.git import get_repo_info
 from docsible.utils.project_structure import ProjectStructure
 
 logger = logging.getLogger(__name__)
+
+
+def _role_less_dirs(roles_dir: Path, valid_roles: list[Path]) -> list[str]:
+    """Names of immediate ``roles/*`` subdirectories that are not valid roles.
+
+    A directory counts as a role only if ``find_roles`` accepts it (has
+    tasks/defaults/vars/meta content). Empty dirs — typically uninitialized
+    git submodules — land here and must be reported, not documented as
+    zero-content roles.
+    """
+    if not roles_dir.is_dir():
+        return []
+    valid = {path.resolve() for path in valid_roles}
+    return sorted(
+        entry.name
+        for entry in roles_dir.iterdir()
+        if entry.is_dir() and entry.resolve() not in valid
+    )
+
+
+def _warn_role_less_dirs(names: list[str]) -> None:
+    for name in names:
+        logger.warning(
+            "Skipping roles/%s: no role content found "
+            "(no tasks/defaults/vars/meta; possibly an uninitialized submodule).",
+            name,
+        )
 
 
 def document_collection_roles(
@@ -39,6 +67,7 @@ def document_collection_roles(
     repository_url: str,
     repo_type: str,
     repo_branch: str,
+    dry_run: bool = False,
 ) -> None:
     """Document all roles in an Ansible collection.
 
@@ -69,6 +98,7 @@ def document_collection_roles(
         repository_url: Repository URL
         repo_type: Repository type (github, gitlab, gitea)
         repo_branch: Repository branch name
+        dry_run: Print the collection documentation plan without writing files
     """
 
     collection_path_obj = Path(collection_path)
@@ -100,6 +130,18 @@ def document_collection_roles(
         logger.warning(f"No collection marker files (galaxy.yml/yaml) found in {collection_path}")
         return
 
+    if dry_run:
+        role_count = 0
+        skipped: list[str] = []
+        for marker in collection_markers:
+            structure = ProjectStructure(str(marker.parent))
+            valid_roles = structure.find_roles()
+            role_count += len(valid_roles)
+            skipped.extend(_role_less_dirs(structure.get_roles_dir(), valid_roles))
+        _warn_role_less_dirs(skipped)
+        click.echo(f"Dry-run: would document {role_count} role(s) in {collection_path}")
+        return
+
     # Process each collection found
     for galaxy_path in collection_markers:
         collection_root = galaxy_path.parent
@@ -124,12 +166,14 @@ def document_collection_roles(
         roles_dir = collection_structure.get_roles_dir()
 
         roles_info = []
+        # Use the same role discovery as `scan collection` (find_roles filters
+        # on real role content), so the two commands can never disagree about
+        # which directories are roles, and role-less dirs are never rendered.
+        valid_roles = collection_structure.find_roles()
+        _warn_role_less_dirs(_role_less_dirs(roles_dir, valid_roles))
         if roles_dir.exists() and roles_dir.is_dir():
-            for role_name in os.listdir(str(roles_dir)):
-                role_path = roles_dir / role_name
-
-                if not role_path.is_dir():
-                    continue
+            for role_path in sorted(valid_roles, key=lambda path: path.name):
+                role_name = role_path.name
 
                 # Load playbook content if specified
                 playbook_content = None
@@ -163,26 +207,73 @@ def document_collection_roles(
 
                     role_info["docsible"] = manage_docsible_file_keys(role_path / ".docsible")
 
-                renderer = ReadmeRenderer(backup=not no_backup)
+                # Analyze complexity, execution graph, and recommendations —
+                # identical to standalone `document role` and `scan collection`
+                # (previously this was skipped entirely for collection roles).
+                analysis = analyze_role(role_info, role_path, min_confidence=0.7)
+
                 role_readme_path = role_path / output
                 template_type = "hybrid" if hybrid else "standard_modular"
 
-                renderer.render_role(
+                render_analyzed_role(
                     role_info=role_info,
+                    role_path=role_path,
+                    analysis=analysis,
                     output_path=role_readme_path,
                     template_type=template_type,
                     custom_template_path=md_role_template,
+                    generate_graph=graph,
+                    minimal=minimal,
+                    simplify_diagrams=simplify_diagrams,
                     no_vars=no_vars,
                     no_tasks=no_tasks,
                     no_diagrams=no_diagrams,
-                    simplify_diagrams=simplify_diagrams,
                     no_examples=no_examples,
                     no_metadata=no_metadata,
                     no_handlers=no_handlers,
+                    include_complexity=hybrid,
                     append=append,
+                    backup=not no_backup,
+                    playbook_content=playbook_content,
+                    execution_graph=analysis.execution_graph,
                 )
 
-                logger.info(f"✓ Documented role: {role_name}")
+                warning_count = sum(
+                    1 for r in analysis.recommendations if r.severity.value == "warning"
+                )
+                critical_count = sum(
+                    1 for r in analysis.recommendations if r.severity.value == "critical"
+                )
+                logger.info(
+                    f"✓ Documented role: {role_name} "
+                    f"({analysis.complexity_report.category.value}, "
+                    f"{critical_count} critical, {warning_count} warning)"
+                )
+
+                # Summary fields for the collection-level Role Index (a human
+                # scanning the collection README needs to see, at a glance,
+                # which roles are complex/risky before opening any of them).
+                category = analysis.complexity_report.category.value
+                role_info["complexity_category"] = category
+                role_info["complexity_rank"] = {
+                    "simple": 0,
+                    "medium": 1,
+                    "complex": 2,
+                    "enterprise": 3,
+                }.get(category, 0)
+                role_info["complexity_badge"] = {
+                    "simple": "🟢 SIMPLE",
+                    "medium": "🟡 MEDIUM",
+                    "complex": "🟠 COMPLEX",
+                    "enterprise": "🔴 ENTERPRISE",
+                }.get(category, category.upper())
+                role_info["complexity_task_count"] = analysis.complexity_report.metrics.total_tasks
+                role_info["complexity_critical_count"] = critical_count
+                role_info["complexity_warning_count"] = warning_count
+                role_info["complexity_top_finding"] = (
+                    analysis.recommendations[0].message if analysis.recommendations else None
+                )
+
                 roles_info.append(role_info)
 
         # Generate collection README

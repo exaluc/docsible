@@ -26,18 +26,21 @@ logger = logging.getLogger(__name__)
 def setup_logging(verbose: bool = False) -> None:
     """Configure logging for the application.
 
+    Logs are routed to stderr so stdout stays clean for data output
+    (e.g. machine-readable JSON from ``--output-format json``).
+
     Args:
-        verbose: If True, set log level to DEBUG, otherwise INFO
+        verbose: If True, set log level to DEBUG, otherwise WARNING
 
     Example:
         >>> setup_logging(verbose=True)
         >>> logger.debug("This will be shown")
     """
-    level = logging.DEBUG if verbose else logging.INFO
+    level = logging.DEBUG if verbose else logging.WARNING
     logging.basicConfig(
         level=level,
         format="%(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
+        handlers=[logging.StreamHandler(sys.stderr)],
     )
 
 

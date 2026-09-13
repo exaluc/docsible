@@ -48,8 +48,7 @@ def _analyse_role(role_path: Path, git_info: dict) -> RoleResult:
     Returns:
         RoleResult with metrics and findings.
     """
-    from docsible.analyzers import analyze_role_complexity
-    from docsible.analyzers.recommendations import generate_all_recommendations
+    from docsible.commands.document_role.role_analysis import analyze_role
     from docsible.commands.role_info_loader import RoleInfoLoader
     from docsible.models.severity import Severity
 
@@ -80,16 +79,14 @@ def _analyse_role(role_path: Path, git_info: dict) -> RoleResult:
     )
     variable_count = defaults_count + vars_count
 
-    # Complexity analysis
-    complexity_report = analyze_role_complexity(
-        role_info,
-        include_patterns=False,
-        min_confidence=0.7,
-    )
+    # Complexity + recommendations — shared with `document role` and
+    # `document role --collection` so all three agree (this previously called
+    # generate_all_recommendations() without the complexity report, missing
+    # the graph-aware findings the other two paths already had).
+    analysis = analyze_role(role_info, role_path, min_confidence=0.7)
+    complexity_report = analysis.complexity_report
     complexity = _complexity_label(complexity_report.category.value)
-
-    # Recommendations
-    recommendations = generate_all_recommendations(role_path)
+    recommendations = analysis.recommendations
 
     critical_count = sum(1 for r in recommendations if r.severity == Severity.CRITICAL)
     warning_count = sum(1 for r in recommendations if r.severity == Severity.WARNING)

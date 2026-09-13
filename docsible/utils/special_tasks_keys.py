@@ -169,6 +169,7 @@ def process_special_task_keys(
     else:
         # Specific modules without 'action' key
         for key in (
+            "include",
             "include_tasks",
             "import_tasks",
             "import_playbook",
@@ -188,12 +189,51 @@ def process_special_task_keys(
         ]
         task_module = module_keys[0] if module_keys else "unknown"
 
-    tasks.append(
-        {
-            "name": escape_pipes(task_name),
-            "module": task_module if task_module != "unknown" else "",  # Blank if unknown
-            "type": task_type,
-            "when": task_when,
-        }
+    # Capture statically resolvable include/import targets for diagram edges
+    include_target: str | None = None
+    short_module = task_module.split(".")[-1]
+    if short_module in ("include", "include_tasks", "import_tasks", "include_role", "import_role"):
+        raw_target = task.get(task_module)
+        if isinstance(raw_target, str):
+            escaped_target = escape_pipes(raw_target)
+            if isinstance(escaped_target, str):
+                include_target = escaped_target
+        elif isinstance(raw_target, dict) and isinstance(raw_target.get("file"), str):
+            escaped_target = escape_pipes(raw_target["file"])
+            if isinstance(escaped_target, str):
+                include_target = escaped_target
+
+    processed_task: dict[str, Any] = {
+        "name": escape_pipes(task_name),
+        "module": task_module if task_module != "unknown" else "",  # Blank if unknown
+        "type": task_type,
+        "when": task_when,
+    }
+    loop_key = "loop" if "loop" in task else next(
+        (key for key in task if key.startswith("with_")), None
     )
+    if loop_key is not None:
+        processed_task["loop"] = loop_key
+        if loop_control := extract_loop_control(task):
+            processed_task["loop_control"] = loop_control
+    if include_target is not None:
+        processed_task["include_target"] = include_target
+    tasks.append(processed_task)
     return tasks
+
+
+def extract_loop_control(task: dict[str, Any]) -> dict[str, Any]:
+    """Extract change-relevant ``loop_control`` fields from a raw task.
+
+    A custom ``loop_var``/``index_var``/``label`` is loop-local variable
+    binding, not a role variable, so it must be captured for both README
+    rendering and execution-graph variable scoping.
+    """
+    control = task.get("loop_control")
+    if not isinstance(control, dict):
+        return {}
+    return {
+        key: control[key]
+        for key in ("loop_var", "index_var", "label")
+        if key in control
+    }

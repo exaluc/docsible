@@ -113,6 +113,16 @@ class DryRunFormatter:
         if handlers_count > 0:
             lines.append(f"   Handlers: {handlers_count}")
 
+        metrics = analysis_report.metrics
+        lines.append(f"   Collections: {metrics.collection_dependencies}")
+        lines.append(f"   Conditional decision points: {metrics.conditional_decision_points}")
+        lines.append(
+            "   Execution graph: "
+            f"{metrics.static_reachable_task_files} static files, "
+            f"{metrics.dynamic_boundaries} dynamic boundaries, "
+            f"{metrics.orphan_task_files} orphans"
+        )
+
         return "\n".join(lines)
 
     def _format_diagrams(

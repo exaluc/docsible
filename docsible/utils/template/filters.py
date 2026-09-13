@@ -10,6 +10,14 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def normalize_license(value: Any) -> str:
+    """Remove redundant ``license (...)`` wrapping from Galaxy metadata."""
+    text = str(value or "").strip()
+    if text.lower().startswith("license (") and text.endswith(")"):
+        return text[9:-1].strip()
+    return text
+
+
 def escape_table_cell(
     value: Any, max_length: int | None = None, truncate_indicator: str = "..."
 ) -> str:
@@ -170,4 +178,5 @@ TEMPLATE_FILTERS = {
     "escape_table_cell": escape_table_cell,
     "escape_table_value": escape_table_value,
     "safe_join": safe_join,
+    "normalize_license": normalize_license,
 }

@@ -6,6 +6,7 @@ orchestrator pattern via RoleOrchestrator.
 
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -258,6 +259,12 @@ def doc_the_role(**kwargs: Any) -> None:
         apply_smart_defaults,
     )
 
+    # In JSON mode, redirect logging to stderr so stdout carries only valid JSON
+    if kwargs.get("output_format") == "json":
+        for handler in logging.root.handlers:
+            if isinstance(handler, logging.StreamHandler) and handler.stream is sys.stdout:
+                handler.stream = sys.stderr
+
     # SMART DEFAULTS INTEGRATION
     # Apply smart defaults based on role complexity (if enabled)
     enable_smart_defaults = os.getenv("DOCSIBLE_ENABLE_SMART_DEFAULTS", "true").lower() == "true"
@@ -425,6 +432,7 @@ def doc_the_role(**kwargs: Any) -> None:
                 repository_url=context.repository.repository_url or "",
                 repo_type=context.repository.repo_type or "",
                 repo_branch=context.repository.repo_branch or "",
+                dry_run=context.processing.dry_run,
             )
         except CollectionNotFoundError as e:
             raise click.ClickException(str(e)) from e

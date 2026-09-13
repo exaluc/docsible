@@ -6,11 +6,12 @@ builders, formatters, and renderers.
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import click
 
-from docsible.analyzers.recommendations import generate_all_recommendations
 from docsible.commands.document_role.models import RoleCommandContext
+from docsible.commands.document_role.role_analysis import analyze_role
 from docsible.commands.role_info_loader import RoleInfoLoader
 from docsible.formatters.text.dry_run import DryRunFormatter
 from docsible.models.recommendation import Recommendation
@@ -55,8 +56,10 @@ class RoleOrchestrator:
         # Step 3: Build role info
         role_info = self._build_role_info(role_path, playbook_content)
 
-        # Step 4: Analyze complexity
-        analysis_report = self._analyze_complexity(role_info)
+        # Step 4: Analyze complexity + recommendations (shared with
+        # `document role --collection` and `scan collection`)
+        analysis = self._analyze_role(role_info, role_path)
+        analysis_report = analysis.complexity_report
 
         if (
             self.context.analysis.recommendations_only
@@ -72,8 +75,10 @@ class RoleOrchestrator:
             self._display_analysis_and_exit(analysis_report, role_info)
             return
 
-        # Step 6: Generate diagrams
-        diagrams = self._generate_diagrams(role_info, analysis_report, playbook_content)
+        # Step 6: Generate diagrams (reuse the shared execution graph)
+        diagrams = self._generate_diagrams(
+            role_info, analysis_report, playbook_content, analysis.execution_graph
+        )
 
         # Step 7: Generate dependency matrix
         dependency_data = self._generate_dependencies(role_info, analysis_report)
@@ -84,8 +89,9 @@ class RoleOrchestrator:
         ):
             self._validate_documentation(role_info, analysis_report, diagrams, dependency_data)
 
-        # Step 7.5: Generate recommendations (use validated role_path from step 1)
-        recommendations = generate_all_recommendations(role_path)
+        # Step 7.5: Recommendations were already computed alongside complexity
+        # in step 4 (shared analyze_role()), using the validated role_path.
+        recommendations = analysis.recommendations
 
         if self.context.analysis.apply_suppressions:
             from docsible.suppression.engine import apply_suppressions
@@ -103,7 +109,7 @@ class RoleOrchestrator:
             suppressed = []
 
         if recommendations or self.context.analysis.output_format == "json":
-            self._display_recommendations(recommendations)
+            self._display_recommendations(recommendations, analysis_report)
 
         # Recommendation strictness applies to documentation generation only.
         # Validate intent reserves strictness for markdown validation below.
@@ -146,13 +152,18 @@ class RoleOrchestrator:
             # Only show recommendations, don't generate documentation
             return
 
-        # Step 8: Handle dry-run mode
+        # Step 8: Handle dry-run mode (JSON mode carries machine output only)
         if self.context.processing.dry_run:
-            self._display_dry_run(role_info, role_path, analysis_report, diagrams, dependency_data)
+            if self.context.analysis.output_format != "json":
+                self._display_dry_run(
+                    role_info, role_path, analysis_report, diagrams, dependency_data
+                )
             return
 
         # Step 9: Render documentation
-        self._render_documentation(role_info, role_path, analysis_report, diagrams, dependency_data)
+        self._render_documentation(
+            role_info, role_path, analysis_report, diagrams, dependency_data, recommendations
+        )
 
     def _validate_paths(self) -> Path:
         """Validate and return role path.
@@ -208,31 +219,31 @@ class RoleOrchestrator:
             read_docsible=not self.context.processing.no_docsible,
         )
 
-    def _analyze_complexity(self, role_info: dict):
-        """Analyze role complexity.
+    def _analyze_role(self, role_info: dict, role_path: Path):
+        """Analyze role complexity and recommendations.
 
-        Reuses cached analysis from smart defaults if available to avoid
+        Delegates to the shared `analyze_role()` used by `document role
+        --collection` and `scan collection`, so all three produce identical
+        complexity/execution-graph/recommendation results for a given role.
+        Reuses cached complexity from smart defaults if available, to avoid
         duplicate analysis.
 
         Args:
             role_info: Role information dictionary
+            role_path: Validated path to the role directory
 
         Returns:
-            Complexity analysis report
+            RoleAnalysis with complexity_report and recommendations
         """
-        # Check if we have a cached report from smart defaults
         if self.context.analysis.cached_complexity_report:
             logger.debug("Reusing complexity analysis from smart defaults (avoiding duplicate)")
-            return self.context.analysis.cached_complexity_report
 
-        # No cached report available, perform fresh analysis
-        from docsible.analyzers import analyze_role_complexity
-
-        logger.debug("Performing fresh complexity analysis")
-        return analyze_role_complexity(
+        return analyze_role(
             role_info,
+            role_path,
             include_patterns=self.context.analysis.simplification_report,
             min_confidence=0.7,
+            cached_complexity_report=self.context.analysis.cached_complexity_report,
         )
 
     def _display_analysis_and_exit(self, analysis_report, role_info: dict) -> None:
@@ -251,7 +262,11 @@ class RoleOrchestrator:
         handle_analyze_only_mode(role_info, role_info.get("name", "unknown"))
 
     def _generate_diagrams(
-        self, role_info: dict, analysis_report, playbook_content: str | None
+        self,
+        role_info: dict,
+        analysis_report,
+        playbook_content: str | None,
+        execution_graph: Any | None = None,
     ) -> dict:
         """Generate all Mermaid diagrams.
 
@@ -259,6 +274,7 @@ class RoleOrchestrator:
             role_info: Role information dictionary
             analysis_report: Complexity analysis report
             playbook_content: Optional playbook content
+            execution_graph: Prebuilt graph to reuse (built here only if absent)
 
         Returns:
             Dictionary of generated diagrams
@@ -267,6 +283,11 @@ class RoleOrchestrator:
             generate_integration_and_architecture_diagrams,
             generate_mermaid_diagrams,
         )
+
+        if execution_graph is None:
+            from docsible.graphs import build_role_execution_graph
+
+            execution_graph = build_role_execution_graph(role_info)
 
         # Generate task diagrams
         diagrams = generate_mermaid_diagrams(
@@ -280,12 +301,15 @@ class RoleOrchestrator:
 
         # Add generate_graph flag for formatter
         diagrams["generate_graph"] = self.context.diagrams.generate_graph
+        diagrams["execution_graph"] = execution_graph
+        diagrams["execution_phases"] = execution_graph.execution_phases()
 
         # Generate integration and architecture diagrams
         integration_boundary, architecture = generate_integration_and_architecture_diagrams(
             generate_graph=self.context.diagrams.generate_graph,
             role_info=role_info,
             analysis_report=analysis_report,
+            execution_graph=execution_graph,
         )
 
         diagrams["integration_boundary_diagram"] = integration_boundary
@@ -354,7 +378,7 @@ class RoleOrchestrator:
 
         click.echo(summary)
 
-    def _display_recommendations(self, recommendations: list[Recommendation]) -> None:
+    def _display_recommendations(self, recommendations: list[Recommendation], analysis_report=None) -> None:
         """Display recommendations to user"""
         all_recs = recommendations
 
@@ -371,6 +395,7 @@ class RoleOrchestrator:
                 role_name=role_name,
                 truncated=False,
                 total_count=len(all_recs),
+                complexity_report=analysis_report,
             )
             click.echo(json_output)
             return
@@ -446,6 +471,7 @@ class RoleOrchestrator:
             "state_diagram": diagrams.get("state_diagram"),
             "integration_boundary_diagram": diagrams.get("integration_boundary_diagram"),
             "architecture_diagram": diagrams.get("architecture_diagram"),
+            "execution_phases": diagrams.get("execution_phases"),
             "complexity_report": analysis_report,
             "include_complexity": include_complexity,
             "dependency_matrix": dependency_data["dependency_matrix"],
@@ -467,6 +493,7 @@ class RoleOrchestrator:
         analysis_report,
         diagrams: dict,
         dependency_data: dict,
+        recommendations: list[Recommendation] | None = None,
     ) -> None:
         """Render final documentation.
 
@@ -476,6 +503,7 @@ class RoleOrchestrator:
             analysis_report: Complexity analysis report
             diagrams: Generated diagrams dictionary
             dependency_data: Dependency matrix data
+            recommendations: Findings to reflect in the success summary
         """
         from docsible.renderers.readme_renderer import ReadmeRenderer
         from docsible.renderers.tag_manager import manage_docsible_file_keys
@@ -515,7 +543,7 @@ class RoleOrchestrator:
             success_msg = formatter.format_success(
                 output_file=readme_path,
                 complexity=analysis_report,
-                recommendations=[],  # recommendations already shown separately above
+                recommendations=recommendations or [],
             )
             click.echo("\n" + success_msg)
         else:

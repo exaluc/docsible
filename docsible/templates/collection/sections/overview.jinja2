@@ -10,10 +10,9 @@
 **Version**: {{ collection.version }}
 
 **Authors**:
-{% for author in collection.authors %}
-- {{ author }}\n
-{%- endfor %}
-
+{% for author in collection.authors -%}
+- {{ author }}
+{% endfor %}
 {% if collection.description -%}
 ## Description
 

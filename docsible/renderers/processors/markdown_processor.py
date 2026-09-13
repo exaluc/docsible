@@ -34,15 +34,23 @@ class MarkdownProcessor:
     def process(self, markdown: str) -> str:
         """Validate and optionally auto-fix markdown formatting.
 
+        Excessive consecutive blank lines are always collapsed to the
+        validator's maximum, regardless of auto_fix.
+
         Args:
             markdown: Raw markdown content
 
         Returns:
-            Fixed markdown (if auto_fix=True) or original markdown
+            Markdown with blank lines normalized; further fixes applied
+            only when auto_fix=True
 
         Raises:
             ValueError: If strict_validation=True and errors found
         """
+        # Always enforce the validator's blank-line rule so generated output
+        # complies with docsible's own markdown validation by default.
+        markdown = self.markdown_fixer.fix_excessive_whitespace(markdown)
+
         # Auto-fix if enabled (do this first)
         if self.auto_fix:
             original_markdown = markdown

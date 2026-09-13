@@ -116,9 +116,9 @@ class TestAdaptiveDocumentation:
         assert "## Architecture Overview" in result
         assert "### Role Components" in result
         assert "30 tasks" in result
-        assert "### Execution Phases" in result
-        assert "Phase 1: install.yml" in result
-        assert "Phase 2: configure.yml" in result
+        assert "### Execution Routes" in result
+        assert "Entry point: install.yml" in result
+        assert "Static continuation: configure.yml" in result
         # Should show recommendations
         assert "### Recommendations" in result
         assert "Role is complex" in result
