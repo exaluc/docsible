@@ -1,6 +1,7 @@
 # Docsible: Verified Project State
 
-Snapshot: 2026-09-13
+Snapshot: 2026-09-13 (updated: Role Execution Graph completion, collection
+support fixes, and role-analysis consolidation)
 
 ## Purpose
 
@@ -53,29 +54,35 @@ The following commands were run for this snapshot:
 ```bash
 uv run pytest
 uv run ruff check .
-uv run python -m build
-npx --yes jscpd docsible
+uv run mypy docsible
 ```
 
-- `uv run pytest` completed successfully.
-- `uv run ruff check .` reported 47 findings, all in the test tree. Most are
-  import ordering or unused-import issues; the check is not currently clean.
-- `uv run python -m build` successfully produced the source distribution and
-  wheel for `docsible-jier` version `0.9.0`.
-- `npx --yes jscpd docsible` was run against the source tree only and found
-  duplicate code, including overlapping analyzer and command-orchestration
-  paths.
+- `uv run pytest`: **1200 passed, 3 xpassed** (was 1156 passed at the
+  2026-08-27 baseline; growth is new regression tests for the Role Execution
+  Graph, collection-support fixes, and the role-analysis consolidation below).
+- `uv run ruff check .`: **all checks passed** (was 47 findings, all in the
+  test tree). The 5 findings remaining after the graph work (an undefined
+  `click` reference, unused defensive imports, an unused loop variable) have
+  since been fixed; the check is now clean.
+- `uv run mypy docsible`: **no issues found in 236 source files**.
+- `uv run python -m build` and `npx --yes jscpd docsible` were run for the
+  2026-08-27 baseline only and have not been re-verified in this snapshot.
 
 ## Known Limitations
 
 - There is no GitHub Actions workflow in `.github/workflows`; tests, linting,
   builds, and CLI smoke checks are not yet run by repository CI.
-- Ruff currently reports findings in the test tree.
-- The analyzer migration is incomplete: role-analysis and role-documentation
-  orchestration retain duplicated implementation, including role-information
-  assembly in `complexity_analyzer` and `document_role`.
+- `RoleInfoBuilder` (`docsible/commands/document_role/builders/role_info_builder.py`)
+  is still present as a deprecated, unused-in-production duplicate of
+  `RoleInfoLoader`. The role-analysis pipeline (complexity, execution graph,
+  recommendations) is now consolidated (see below); role-information
+  *loading* still has this one remaining duplicate implementation.
 - The deprecated `docsible role` command is still present alongside the newer
   intent-based command groups.
+- Collections do not yet resolve cross-role boundaries: `include_role`/
+  `import_role` targets pointing at a sibling role in the same collection are
+  recorded as `unresolved_external` rather than a real internal graph edge.
+  See Next Graph Milestones.
 
 ## Role Execution Graph
 
@@ -101,10 +108,29 @@ interface is `build_role_execution_graph(role_info)`.
   Loop column when applicable.
 - Complexity reports retain their structural metrics and add graph metrics:
   statically reachable task files, dynamic and unknown boundaries, external
-  role references, loop tasks, notification edges, and orphan task files.
+  role references, loop tasks, notification edges, orphan task files,
+  collection dependencies, and conditional decision points. The full
+  serialized graph (`nodes`, `edges`) is attached to the complexity report and
+  exposed via `analyze role --output-format json`.
 - The graph uses standard-library dataclasses for a small serializable core.
   NetworkX is not a Docsible dependency; a future visualization adapter may
   convert the graph for layout algorithms.
+- Templated include/import targets are classified, not just marked unknown:
+  a target matching `{{ role_path }}/tasks/<literal>` resolves statically; a
+  templated target with a literal filename prefix (e.g.
+  `install-{{ os_family }}.yml`) resolves to one or more `dynamic` candidate
+  edges against in-repo files with that prefix; fully unconstrained
+  expressions remain dynamic with no fabricated candidates.
+- For roles classified `ENTERPRISE`, the README uses a bounded **grouped
+  execution overview** (directory-level groups, dynamic/unknown boundaries
+  summarized as counts, orphan files collapsed to one line) instead of a
+  detailed per-task-file diagram that would be unreadable at that size. The
+  detailed projection is used below a fixed budget (20 task files, 35
+  relationship edges, fan-out 8); any signal exceeded switches projection.
+- The rendered README leads with product value before task-file reference
+  material: Overview → Architecture Overview → Execution Graph Summary →
+  Execution Routes → Recommendations → Variable Reference → Task File
+  Reference → Handlers.
 
 ### Verified External Cases
 
@@ -116,6 +142,21 @@ interface is `build_role_execution_graph(role_info)`.
   JSON parses, documentation generation succeeds, `main.yml` is Phase 1, the
   seven OS-specific branches retain their `when` conditions, and `vhosts.yml`
   is reached through its static import.
+- `geerlingguy/ansible-role-mysql` @ `0a0ea6b728120b3ab3918332d9404bb65836834d`:
+  legacy `with_items`/`with_first_found` loops render in task tables; 9 static
+  include boundaries resolve; no false orphans.
+- `geerlingguy/ansible-role-postgresql` @ `53abdf144de8231b2f2ce0652523eebc3eda7100`:
+  mixed `include_tasks`/`import_tasks` boundaries resolve; a 27-file `vars/`
+  directory renders without truncation.
+- `nginx/ansible-role-nginx` (official) @ `157e0e97406f798bd6f50db37430a78c4269aa92`:
+  244 tasks, 31 nested task files, classified `ENTERPRISE`. Verifies the
+  grouped execution overview and templated-target classification: 22 dynamic
+  candidate edges resolve against in-repo files, 0 unknown boundaries, 0 false
+  orphans (was 13 before dynamic-candidate resolution).
+- `prometheus-community/ansible` @ `e2f46e17d33651c3c09042aaa9c8f29b87a9753f`
+  (the `prometheus.prometheus` collection, 26 roles): first real collection
+  exercised end-to-end; verifies collection support fixes and role-analysis
+  parity below.
 
 ### Completed Graph Milestones
 
@@ -124,20 +165,84 @@ interface is `build_role_execution_graph(role_info)`.
 3. Replace placeholder phases with source-backed Execution Routes.
 4. Preserve static and dynamic cross-role boundaries in a JSON-serializable
    renderer contract.
+5. Classify templated include/import targets as static, dynamic-candidate, or
+   genuinely unresolved, instead of leaving every templated target as an
+   orphan.
+6. Add a bounded grouped-execution-overview projection for `ENTERPRISE` roles
+   so large role graphs stay readable instead of being suppressed entirely or
+   rendered as an unreadable wall of nodes.
+7. Consolidate role complexity/execution-graph/recommendation analysis into
+   one shared implementation (`docsible/commands/document_role/role_analysis.py`:
+   `analyze_role()` + `render_analyzed_role()`), used identically by
+   `RoleOrchestrator` (standalone `document role`), `document_collection_roles()`
+   (`document role --collection`), and `scan/collection.py::_analyse_role()`
+   (`scan collection`). This fixed a real divergence: `scan collection`
+   previously computed recommendations without the complexity report and
+   silently missed the graph-aware findings the other two paths already had.
+8. Give collection roles full parity with standalone roles: every role
+   documented via `document role --collection` now gets an identical
+   Architecture Overview, Execution Graph Summary, Execution Routes, and
+   Recommendations section (previously skipped entirely for collection
+   roles).
+9. Add a collection-level **Complexity Overview** and **Role Index** to the
+   collection README: aggregate role counts by complexity category and total
+   task count, plus a per-role table (complexity badge, task count,
+   critical/warning counts, top finding) sorted by complexity descending, so
+   a reader sees which roles need attention before opening any of them. This
+   is deliberately an index of independent per-role facts, not a synthesized
+   single "collection complexity" score — a collection has no single
+   execution graph the way one role does.
 
 ### Next Graph Milestones
 
 1. Publish a documented JSON graph contract after its node and edge fields are
    exercised by more external candidates.
-2. Resolve locally available roles in sibling role directories and collections;
-   retain absent Galaxy/FQCN roles as explicit external-reference nodes.
-3. Add graph projections for dynamic task/role includes, blocks,
-   rescue/always, and source-linked variable scopes without claiming static
-   certainty where Ansible defers resolution.
+2. Resolve `include_role`/`import_role` targets that point at a sibling role
+   in the same collection into real internal graph edges, instead of
+   `unresolved_external`. Scoped narrowly to this one relationship (not a
+   full collection-wide dependency graph, which was assessed as low value:
+   readers almost always want one role's own dependencies, not a map of all
+   roles' relationships).
+3. Add graph projections for blocks, rescue/always, and source-linked
+   variable scopes without claiming static certainty where Ansible defers
+   resolution.
 4. Make `graph_visualisation` a renderer adapter over this contract, using
    NetworkX only for renderer-specific layout work.
 5. Extend the pinned external corpus before treating the graph contract as
    release-stable.
+
+## Collection Support
+
+`document role --collection` and `scan collection` were exercised end-to-end
+for the first time against a real, non-trivial collection
+(`prometheus-community/ansible`, 26 roles) and had several defects that a
+smaller/synthetic test collection did not surface:
+
+- `document role --collection ... --dry-run` was not read-only: it wrote a
+  README backup before any short-circuit existed. Fixed with an explicit
+  dry-run check before any file is touched.
+- `meta/argument_specs.yml` files using Ansible's `!unsafe` YAML tag failed to
+  load (`could not determine a constructor for the tag '!unsafe'`). Fixed
+  with a `DocsibleSafeLoader` that preserves the scalar value.
+- The role README template referenced `sections/argument_specs.jinja2`,
+  which did not exist, crashing collection documentation for any role with
+  argument specs. The template was added.
+- The collection-level README template referenced `role.belongs_to_collection`
+  in a macro where `role` was never in scope, raising
+  `jinja2.exceptions.UndefinedError` for any collection with a detectable
+  repository URL. Fixed: collection-level links always build the `roles/`
+  prefix, since collection templates are always in a collection context.
+- Nearly every collection template (`overview.jinja2`, `roles_list.jinja2`,
+  `galaxy_info.jinja2`, `dependencies.jinja2`, `plugin_list.jinja2`, and the
+  `render_arguments_list` macro) was missing Jinja whitespace control,
+  producing a blank line after almost every list item, table row, and
+  argument-spec field — a generated collection README for a 26-role
+  collection was ~8000 lines, mostly blank. Fixed at the template level, and
+  `render_collection()` now applies the same blank-line normalization
+  (`MarkdownProcessor`) that `render_role()` already applied, capping any
+  residual run at 2 consecutive blank lines.
+- `sections/overview.jinja2` printed a literal `\n` after every collection
+  author name (a template typo, not an escape sequence). Fixed.
 
 ## Remaining Duplication Work
 
